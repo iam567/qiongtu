@@ -161,6 +161,15 @@ private fun Content(
         }
         TextTab.LAYOUT -> Column(pad, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextToggle("竖排", item.vertical) {
+                    s.change {
+                        // 框拉过的长度横竖不通用，换方向就重来；竖排一列太长的，先按一列 8 个字排。
+                        val v = !it.vertical
+                        val longest = it.text.split("\n").maxOfOrNull { l -> l.length } ?: 0
+                        it.copy(vertical = v, wrap = if (v && longest > 10) 8.3f else 0f)
+                    }
+                }
+                Box(Modifier.size(1.dp, 20.dp).background(Theme.chip))
                 for (a in OverlayAlign.entries) Toggle(a.symbol, item.align == a) { s.change { it.copy(align = a) } }
                 Box(Modifier.size(1.dp, 20.dp).background(Theme.chip))
                 Toggle("bold", item.bold) { s.change { it.copy(bold = !it.bold) } }
@@ -177,6 +186,15 @@ private fun Content(
             MiniSlider("大小", item.scale, 0.3f..5f) { v -> s.change { it.copy(scale = v) } }
         }
     }
+}
+
+/** 和 Toggle 一样大的开关，但写字（"竖排"用图标说不清）。 */
+@Composable
+private fun TextToggle(title: String, on: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(50.dp, 34.dp).clip(RoundedCornerShape(9.dp)).background(if (on) Color.White else Theme.chip).tap(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (on) Color.Black else Color.White, maxLines = 1) }
 }
 
 @Composable

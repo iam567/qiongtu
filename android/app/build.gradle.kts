@@ -13,8 +13,8 @@ android {
         applicationId = "com.taoo.xiutu"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3"
+        versionCode = 4
+        versionName = "0.4"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += listOf("-DANDROID_STL=c++_static") } }
     }
