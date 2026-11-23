@@ -180,7 +180,7 @@ struct EditorView: View {
                 .allowsHitTesting(false)
             }
             if let id = editingTextID {
-                TextInputOverlay(initial: model.overlayItems.first { $0.id == id }?.text ?? "", placeholder: "输入文字") { text in
+                TextInputOverlay(initial: model.overlayItems.first { $0.id == id }?.text ?? "", placeholder: "输入文字", multiline: true) { text in
                     finishTextEditing(id: id, text: text)
                 }
             }
@@ -222,8 +222,10 @@ struct EditorView: View {
                     handle(.ai(group))
                 } else if name == "text+vertical" {
                     model.open(.text) {
-                        let id = model.addOverlay(text: "竖排文字，你好。\n第二列 2026", sticker: false)
-                        model.updateOverlay(id) { $0.vertical = true; $0.size = 0.09 }
+                        let id = model.addOverlay(text: "积极佳佳佳佳佳佳佳佳佳佳佳家\n第二段", sticker: false)
+                        model.updateOverlay(id) { $0.vertical = true; $0.wrap = 6.3; $0.size = 0.07; $0.lineSpacing = 0.4 }
+                        let h = model.addOverlay(text: "横排拉宽以后自动换行的一段文字", sticker: false)
+                        model.updateOverlay(h) { $0.vertical = false; $0.lineSpacing = 0; $0.wrap = 7.3; $0.size = 0.05; $0.center = CGPoint(x: 0.3, y: 0.25) }
                     }
                 } else if name == "layers+blank" {
                     model.open(.layers) { model.addBlankLayer() }
@@ -724,6 +726,8 @@ struct MainMenu: View {
 struct TextInputOverlay: View {
     let initial: String
     var placeholder = "输入文字"
+    /// 回车换行（文字贴纸用），按"完成"结束；否则回车就是完成。
+    var multiline = false
     var onDone: (String) -> Void
 
     @State var text = ""
@@ -740,13 +744,34 @@ struct TextInputOverlay: View {
                     Button("完成") { onDone(text) }
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(Theme.accent)
+                        .keyboardShortcut(.return, modifiers: .command)
                 }
-                TextField(placeholder, text: $text, axis: .vertical)
-                    .font(.system(size: 26, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.white)
-                    .lineLimit(1...5)
-                    .focused($focused)
+                if multiline {
+                    ZStack(alignment: .top) {
+                        if text.isEmpty {
+                            Text(placeholder)
+                                .font(.system(size: 26, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.35))
+                                .padding(.top, 8)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: $text)
+                            .font(.system(size: 26, weight: .semibold))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .focused($focused)
+                    }
+                    .frame(maxHeight: 260)
+                } else {
+                    TextField(placeholder, text: $text, axis: .vertical)
+                        .font(.system(size: 26, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                        .lineLimit(1...5)
+                        .focused($focused)
+                }
                 Spacer()
             }
             .padding(20)

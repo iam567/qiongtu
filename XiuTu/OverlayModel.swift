@@ -164,6 +164,9 @@ struct OverlayItem: Identifiable, Equatable {
     var align: OverlayAlign = .center
     /// 竖排：从上往下写，一列写完换到左边一列（中文直排的习惯）。
     var vertical = false
+    /// 文字框拉出来的长度（横排是宽、竖排是高），单位是"字号的倍数"；字排满了自动换行 / 换列。
+    /// 0 = 没拉过，框跟着字走，只按回车换行。
+    var wrap: CGFloat = 0
     /// 字距、行距，单位是"字号的倍数"。
     var letterSpacing: CGFloat = 0
     var lineSpacing: CGFloat = 0

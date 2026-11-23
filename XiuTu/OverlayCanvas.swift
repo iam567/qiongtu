@@ -157,6 +157,18 @@ private struct SelectionChrome: View {
 
     @State private var start: HandleStart?
 
+    private struct EdgeStart {
+        /// 拖之前框在拉的方向上有多长（屏幕点）。
+        let length: CGFloat
+        let center: CGPoint
+        let fontSize: CGFloat
+    }
+
+    @State private var edgeStart: EdgeStart?
+
+    /// 文字可以拉边改框的长度：横排拉右边改宽，竖排拉下边改高。
+    private var canStretch: Bool { !item.isSticker && !item.isImage && !item.isGraphic }
+
     var body: some View {
         let center = CGPoint(x: item.center.x * fitted.width, y: item.center.y * fitted.height)
         ZStack {
@@ -190,10 +202,50 @@ private struct SelectionChrome: View {
                         .onEnded { _ in start = nil }
                 )
                 .offset(x: size.width / 2, y: size.height / 2)
+            if canStretch {
+                edgeHandle(center: center)
+                    .offset(x: item.vertical ? 0 : size.width / 2, y: item.vertical ? size.height / 2 : 0)
+            }
         }
         .frame(width: size.width, height: size.height)
         .rotationEffect(.radians(item.rotation))
         .position(center)
+    }
+
+    /// 拉边：拉的那条边跟着手走，对面那条边不动；字排满了自动换行（竖排换列）。
+    private func edgeHandle(center: CGPoint) -> some View {
+        Capsule()
+            .fill(Color.white)
+            .frame(width: item.vertical ? 26 : 8, height: item.vertical ? 8 : 26)
+            .overlay(Capsule().stroke(Color.black.opacity(0.25), lineWidth: 0.5))
+            .contentShape(Rectangle().inset(by: -12))
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
+                    .onChanged { value in
+                        let fs = max(item.size * item.scale * fitted.width, 1)
+                        if edgeStart == nil {
+                            // 没拉过的框，从现在字实际占的长度开始拉。
+                            var length = item.wrap * fs
+                            if item.wrap <= 0, let layout = OverlayDrawing.layout(item, fontSize: fs) {
+                                length = item.vertical ? layout.contentSize.height : layout.contentSize.width
+                            }
+                            edgeStart = EdgeStart(length: length, center: item.center, fontSize: fs)
+                        }
+                        guard let s = edgeStart, fitted.width > 0, fitted.height > 0 else { return }
+                        // 拉的方向（跟着文字一起转）。
+                        let r = item.rotation
+                        let axis = item.vertical ? CGPoint(x: -sin(r), y: cos(r)) : CGPoint(x: cos(r), y: sin(r))
+                        let d = value.translation.width * axis.x + value.translation.height * axis.y
+                        let length = min(max(s.length + d, s.fontSize * 1.05), s.fontSize * 80)
+                        let moved = (length - s.length) / 2
+                        model.updateOverlay(item.id) {
+                            $0.wrap = length / s.fontSize
+                            $0.center = CGPoint(x: s.center.x + axis.x * moved / fitted.width,
+                                                y: s.center.y + axis.y * moved / fitted.height)
+                        }
+                    }
+                    .onEnded { _ in edgeStart = nil }
+            )
     }
 
     private func handle(_ symbol: String) -> some View {

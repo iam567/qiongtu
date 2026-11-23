@@ -18,6 +18,8 @@ enum OverlayDrawing {
         fileprivate let fakeBold: Bool
         fileprivate let boxPath: CGPath?
         fileprivate let boxEvenOdd: Bool
+        /// 文字实际占的大小（不算描边、阴影留的边）。
+        var contentSize: CGSize { content.size }
     }
 
     private static let sRGB = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
@@ -66,10 +68,18 @@ enum OverlayDrawing {
         }
         let probe = attributed(item, font: font, fontSize: fs, color: OverlayColor.white.cgColor(), stroke: 0)
         let setter = CTFramesetterCreateWithAttributedString(probe)
-        let limit = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        var limit = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        // 拉过文字框的边：这个方向上框就是这么长，字排满了自动换行（竖排换列），对齐按这个框来。
+        let wrap = !item.isSticker && item.wrap > 0 ? max(item.wrap, 1.05) * fs : 0
+        if wrap > 0 {
+            if item.vertical { limit.height = wrap } else { limit.width = wrap }
+        }
         let fit = CTFramesetterSuggestFrameSizeWithConstraints(setter, CFRange(location: 0, length: 0),
                                                                frameAttributes(item), limit, nil)
-        let text = CGRect(x: 0, y: 0, width: ceil(fit.width) + 2, height: ceil(fit.height) + 2)
+        var text = CGRect(x: 0, y: 0, width: ceil(fit.width) + 2, height: ceil(fit.height) + 2)
+        if wrap > 0 {
+            if item.vertical { text.size.height = max(text.height, ceil(wrap)) } else { text.size.width = max(text.width, ceil(wrap)) }
+        }
 
         var box: CGPath?
         var evenOdd = false
@@ -163,13 +173,24 @@ enum OverlayDrawing {
         }
         if item.isSticker { alignment = .center }
         var spacing = item.isSticker ? 0 : fs * min(max(item.lineSpacing, -0.3), 2)
+        // 竖排时 Core Text 按字体的横排行高算列宽，系统字体（中文靠后备字体）会算得很宽，行距也会被放大好几倍；
+        // 所以竖排直接把每列宽度定死：字号 ×（1.25 + 行距）。
+        let vertical = !item.isSticker && item.vertical
+        var column = max(fs * 0.8, fs * 1.25 + spacing)
+        if vertical { spacing = 0 }
         let paragraph: CTParagraphStyle = withUnsafePointer(to: &alignment) { a in
             withUnsafePointer(to: &spacing) { s in
-                let settings = [
-                    CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: a),
-                    CTParagraphStyleSetting(spec: .lineSpacingAdjustment, valueSize: MemoryLayout<CGFloat>.size, value: s),
-                ]
-                return CTParagraphStyleCreate(settings, settings.count)
+                withUnsafePointer(to: &column) { h in
+                    var settings = [
+                        CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: a),
+                        CTParagraphStyleSetting(spec: .lineSpacingAdjustment, valueSize: MemoryLayout<CGFloat>.size, value: s),
+                    ]
+                    if vertical {
+                        settings.append(CTParagraphStyleSetting(spec: .minimumLineHeight, valueSize: MemoryLayout<CGFloat>.size, value: h))
+                        settings.append(CTParagraphStyleSetting(spec: .maximumLineHeight, valueSize: MemoryLayout<CGFloat>.size, value: h))
+                    }
+                    return CTParagraphStyleCreate(settings, settings.count)
+                }
             }
         }
         var attrs: [CFString: Any] = [

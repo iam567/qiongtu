@@ -201,7 +201,14 @@ struct TextPanel: View {
         case .layout:
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
-                    textToggle("竖排", on: item.vertical) { change { $0.vertical.toggle() } }
+                    textToggle("竖排", on: item.vertical) {
+                        change {
+                            $0.vertical.toggle()
+                            // 框拉过的长度横竖不通用，换方向就重来；竖排一列太长的，先按一列 8 个字排。
+                            let longest = $0.text.split(separator: "\n").map(\.count).max() ?? 0
+                            $0.wrap = $0.vertical && longest > 10 ? 8.3 : 0
+                        }
+                    }
                     Rectangle().fill(Theme.chip).frame(width: 1, height: 20)
                     ForEach(OverlayAlign.allCases) { align in
                         toggle(align.symbol, on: item.align == align) { change { $0.align = align } }
