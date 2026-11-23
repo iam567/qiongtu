@@ -115,6 +115,13 @@ data class OverlayItem(
     val bold: Boolean = false,
     val italic: Boolean = false,
     val align: OverlayAlign = OverlayAlign.CENTER,
+    /** 竖排：从上往下写，一列写完换到左边一列（中文直排的习惯）。 */
+    val vertical: Boolean = false,
+    /**
+     * 文字框拉出来的长度（横排是宽、竖排是高），单位是"字号的倍数"；字排满了自动换行 / 换列。
+     * 0 = 没拉过，框跟着字走，只按回车换行。
+     */
+    val wrap: Float = 0f,
     /** 字距、行距，单位是"字号的倍数"。 */
     val letterSpacing: Float = 0f,
     val lineSpacing: Float = 0f,

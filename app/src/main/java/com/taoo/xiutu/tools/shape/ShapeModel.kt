@@ -379,6 +379,8 @@ data class ShapeParams(
     val restore: List<ShapeRestoreStroke> = emptyList(),
     /** 背景保护用的人像蒙版（白 = 人）；null = 不保护。 */
     val lockMask: Bitmap? = null,
+    /** AI 补好的"没有人的背景"（任意尺寸，拉到整张图）；有它时人让出来的地方直接用它。 */
+    val aiPlate: Bitmap? = null,
 ) {
     val hasTall: Boolean get() = talls.any { it.amount != 0f }
 
@@ -388,11 +390,11 @@ data class ShapeParams(
 
     val isIdentity: Boolean get() = !hasTall && !hasLocal
 
-    /** plate：提前算好的"没有人的背景"（实时预览用），不传就现算。 */
+    /** plate：提前算好的背景变形权重（实时预览用），不传就现算。 */
     fun apply(src: Bitmap, plate: Warp.Plate? = null): Bitmap {
         if (isIdentity) return src
         val field = ShapeEngine.field(this, src.width, src.height) ?: return src
-        return Warp.render(src, field, if (hasTall) null else lockMask, plate)
+        return Warp.render(src, field, if (hasTall) null else lockMask, plate, aiPlate)
     }
 }
 

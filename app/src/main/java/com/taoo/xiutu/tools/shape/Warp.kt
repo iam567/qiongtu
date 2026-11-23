@@ -42,8 +42,8 @@ object Warp {
     private const val CTX_SIDE = 640
     private const val TILE = 2048
 
-    /** 提前补好的"没有人的背景"（缩小版）：fill = 人的位置由外向里晕开的背景色，grown = 外扩一点的人像蒙版。 */
-    class Plate(val fill: Bitmap, val grown: Bitmap)
+    /** 背景保护的准备（缩小版）：weight = 背景变形的权重，人身上是 1，出了人的轮廓平滑减到 0。 */
+    class Plate(val weight: Bitmap)
 
     /** 抹平后的网格。 */
     private class Smoothed(val w: Int, val h: Int, val dx: FloatArray, val dy: FloatArray, val range: Float) {
@@ -76,9 +76,12 @@ uniform vec2 orig;
 uniform vec2 inOrig;
 #ifdef LOCK
 uniform sampler2D person;
+#ifdef AIFILL
 uniform sampler2D changed;
-uniform sampler2D grown;
-uniform sampler2D fill;
+uniform sampler2D aiplate;
+#else
+uniform sampler2D weight;
+#endif
 #endif
 // 网格存成 16 位：上半张 x，下半张 y。
 float dec(vec4 t) {
@@ -117,18 +120,22 @@ vec4 at(vec2 pix) {
 }
 void main() {
     vec2 pix = orig + uv * size;
-    vec2 sp = pix + offsetAt(pix) * scale;
+    vec2 off = offsetAt(pix) * scale;
+    vec2 sp = pix + off;
     vec4 warped = at(sp);
 #ifdef LOCK
     float moved = texture(person, clamp(sp, vec2(0.5), inFull - 0.5) / inFull).r;
     vec2 u = pix / inFull;
+#ifdef AIFILL
+    // AI 补背景：人的轮廓动过的地方换成 AI 补好的背景，其余地方一个像素都不动。
     float ch = texture(changed, u).r;
-    float gr = texture(grown, u).r;
-    vec4 img = at(pix);
-    vec4 bg = img * (1.0 - gr);
-    vec4 plate = bg + texture(fill, u) * (1.0 - bg.a);
-    // 只有人的轮廓真的动过的地方才换成补好的背景，其余地方一个像素都不动。
-    vec4 behind = mix(img, plate, ch);
+    vec4 behind = mix(at(pix), texture(aiplate, u), ch);
+#else
+    // 背景：人身上和人让出来的缝里照常变形（缝里是旁边拉过来的背景，纹理清楚），
+    // 出了人的轮廓，变形平滑地减到零。背景是连续的一整张，不会出现两张图叠在一起的重影。
+    float w = texture(weight, u).r;
+    vec4 behind = at(pix + off * w);
+#endif
     o = mix(behind, warped, moved);
 #else
     o = warped;
@@ -138,12 +145,14 @@ void main() {
 
     private val WARP = Shaders.HEADER + WARP_BODY
     private val WARP_LOCK = Shaders.HEADER.replaceFirst("#version 300 es\n", "#version 300 es\n#define LOCK\n") + WARP_BODY
+    private val WARP_AIFILL = Shaders.HEADER.replaceFirst("#version 300 es\n", "#version 300 es\n#define LOCK\n#define AIFILL\n") + WARP_BODY
 
     /**
      * 按位移场取样。mask 不为空、而且画布大小没变时做背景保护（mask 白 = 人，任意尺寸）。
-     * plate 是提前算好的无人背景（实时预览用），不传就现算。后台线程调用。
+     * plate 是提前算好的背景变形权重（实时预览用），不传就现算；aiPlate 是 AI 补好的无人背景（整张图），
+     * 有它时人让出来的地方直接用它。后台线程调用。
      */
-    fun render(src: Bitmap, field: WarpField, mask: Bitmap? = null, plate: Plate? = null): Bitmap {
+    fun render(src: Bitmap, field: WarpField, mask: Bitmap? = null, plate: Plate? = null, aiPlate: Bitmap? = null): Bitmap {
         val w = src.width
         val h = src.height
         val scale = max(w, h).toFloat()
@@ -155,10 +164,13 @@ void main() {
         var changedBmp: Bitmap? = null
         var plateUsed: Plate? = null
         if (lock && mask != null) {
-            plateUsed = plate ?: plate(src, mask)
-            changedBmp = changedMask(sm, mask, w, h)
+            if (aiPlate != null) changedBmp = changedMask(sm, mask, w, h) else plateUsed = plate ?: plate(src, mask)
         }
-        val frag = if (lock) WARP_LOCK else WARP
+        val frag = when {
+            !lock -> WARP
+            aiPlate != null -> WARP_AIFILL
+            else -> WARP_LOCK
+        }
         val cellPx = max(ow, oh).toFloat() / max(sm.w, sm.h)
         val reach = ceil(sm.range * scale + cellPx * 3 + 4).toInt()
 
@@ -175,11 +187,14 @@ void main() {
         return Gpu.run {
             val grid = upload(gridBmp)
             val extra = HashMap<String, Tex>()
-            if (lock && mask != null && plateUsed != null && changedBmp != null) {
+            if (lock && mask != null) {
                 extra["person"] = upload(mask)
-                extra["changed"] = upload(changedBmp)
-                extra["grown"] = upload(plateUsed.grown)
-                extra["fill"] = upload(plateUsed.fill)
+                if (aiPlate != null && changedBmp != null) {
+                    extra["changed"] = upload(changedBmp)
+                    extra["aiplate"] = upload(aiPlate)
+                } else if (plateUsed != null) {
+                    extra["weight"] = upload(plateUsed.weight)
+                }
             }
             val limit = min(Gpu.maxTextureSize, 4096)
             if (max(max(w, h), max(ow, oh)) <= limit) {
@@ -266,61 +281,18 @@ void main() {
     }
 
     /**
-     * "没有人的背景"：把人所在的位置用周围的背景颜色由外向里填上。人让出来的地方显示它，而不是被拉花的画面。
-     * 每一层把周围的背景颜色向人的位置里晕开（只统计背景像素）；离背景近的地方用细的，深处才用粗的。
+     * 背景变形的权重：人身上（包括人让出来的缝）一定是 1，缝里才不会残留人的边；
+     * 外面一圈（人像外扩 1.2%、再羽化 1%）平滑减到 0，背景离人远的地方一个像素都不动。
      */
     fun plate(image: Bitmap, mask: Bitmap): Plate {
         val (cw, ch) = ctxSize(image.width, image.height)
         val long = max(cw, ch).toFloat()
-        val small = Img.scaled(Img.soft(Img.downscale(image, max(cw, ch))), cw, ch)
-        val px = IntArray(cw * ch)
-        small.getPixels(px, 0, cw, 0, 0, cw, ch)
-        // 人像蒙版往外扩一点，避免人边缘的颜色混进背景。
-        val grown = maskPlane(mask, cw, ch)
-        dilate(grown, cw, ch, (long * 0.006f).roundToInt())
-        val n = cw * ch
-        val bg = Array(4) { FloatArray(n) }
-        for (i in 0 until n) {
-            val c = px[i]
-            val a = ((c ushr 24) and 0xFF) / 255f
-            val keep = a * (1 - grown[i])
-            bg[0][i] = ((c shr 16) and 0xFF) / 255f * keep
-            bg[1][i] = ((c shr 8) and 0xFF) / 255f * keep
-            bg[2][i] = (c and 0xFF) / 255f * keep
-            bg[3][i] = keep
-        }
-        fun level(radius: Float): Array<FloatArray> {
-            val b = Array(4) { bg[it].copyOf() }
-            for (p in b) gaussBox(p, cw, ch, long * radius)
-            return b
-        }
-        val pr = FloatArray(n); val pg = FloatArray(n); val pb = FloatArray(n)
-        val base = level(0.2f)
-        for (i in 0 until n) {
-            val a = base[3][i]
-            if (a > 1e-6f) { pr[i] = base[0][i] / a; pg[i] = base[1][i] / a; pb[i] = base[2][i] / a }
-        }
-        for (radius in floatArrayOf(0.07f, 0.025f, 0.008f)) {
-            val l = level(radius)
-            for (i in 0 until n) {
-                val a = l[3][i]
-                val wgt = (a * 5f).coerceIn(0f, 1f)
-                if (wgt <= 0f) continue
-                val r = if (a > 1e-6f) l[0][i] / a else 0f
-                val g = if (a > 1e-6f) l[1][i] / a else 0f
-                val b = if (a > 1e-6f) l[2][i] / a else 0f
-                pr[i] += (r - pr[i]) * wgt
-                pg[i] += (g - pg[i]) * wgt
-                pb[i] += (b - pb[i]) * wgt
-            }
-        }
-        val fill = IntArray(n) {
-            val r = (pr[it].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-            val g = (pg[it].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-            val b = (pb[it].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-            (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-        }
-        return Plate(Bitmap.createBitmap(fill, cw, ch, Bitmap.Config.ARGB_8888), grayBitmap(grown, cw, ch))
+        val person = maskPlane(mask, cw, ch)
+        val falloff = person.copyOf()
+        dilate(falloff, cw, ch, (long * 0.012f).roundToInt())
+        gaussBox(falloff, cw, ch, long * 0.01f)
+        for (i in person.indices) falloff[i] = max(falloff[i], person[i])
+        return Plate(grayBitmap(falloff, cw, ch))
     }
 
     /** 人的轮廓动过的地方：|人 - 变形后的人|，外扩 1%、羽化 0.5%、放大 2.5 倍。 */

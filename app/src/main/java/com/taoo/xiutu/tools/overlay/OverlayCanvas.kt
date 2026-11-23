@@ -229,6 +229,7 @@ private fun SelectionChrome(s: OverlaySession, item: OverlayItem, e: OverlayRend
     val cy = frame.top + item.cy * frame.height
     val id = item.id
     val size by rememberUpdatedState(Offset(cw, ch))
+    val currentFrame by rememberUpdatedState(frame)
     Box(
         Modifier
             .offset { IntOffset((cx - cw / 2).roundToInt(), (cy - ch / 2).roundToInt()) }
@@ -276,6 +277,45 @@ private fun SelectionChrome(s: OverlaySession, item: OverlayItem, e: OverlayRend
                 }
             }
         })
+        // 文字可以拉边改框的长度：横排拉右边改宽，竖排拉下边改高；拉的边跟着手走，对面那条边不动，字排满了自动换行。
+        if (!item.isSticker && !item.isImage && item.graphic == null) {
+            val vertical = item.vertical
+            EdgeHandle(vertical, Modifier.align(if (vertical) Alignment.BottomCenter else Alignment.CenterEnd).pointerInput(id, vertical) {
+                awaitEachGesture {
+                    awaitFirstDown().consume()
+                    val start = s.items.firstOrNull { it.id == id } ?: return@awaitEachGesture
+                    val fr = currentFrame
+                    val fs = max(start.size * start.scale * fr.width, 1f)
+                    // 没拉过的框，从现在字实际占的长度开始拉。
+                    val startLen = if (start.wrap > 0f) start.wrap * fs else {
+                        val c = OverlayDrawing.layout(start, fs)?.content
+                        if (c == null) fs else if (vertical) c.height() else c.width()
+                    }
+                    var total = 0f
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val c = ev.changes.firstOrNull { it.pressed } ?: break
+                        // 手柄跟着框一起转，坐标已经是框自己的方向。
+                        val d = c.position - c.previousPosition
+                        total += if (vertical) d.y else d.x
+                        val len = (startLen + total).coerceIn(fs * 1.05f, fs * 80f)
+                        val moved = (len - startLen) / 2
+                        val shift = rotated(if (vertical) Offset(0f, moved) else Offset(moved, 0f), start.rotation)
+                        s.update(id) {
+                            it.copy(wrap = len / fs, cx = start.cx + shift.x / fr.width, cy = start.cy + shift.y / fr.height)
+                        }
+                        c.consume()
+                    }
+                }
+            })
+        }
+    }
+}
+
+@Composable
+private fun EdgeHandle(vertical: Boolean, modifier: Modifier) {
+    Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(if (vertical) 26.dp else 8.dp, if (vertical) 8.dp else 26.dp).clip(CircleShape).background(Color.White))
     }
 }
 

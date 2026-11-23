@@ -24,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -419,9 +420,9 @@ fun TextInputOverlay(initial: String, placeholder: String, onDone: (String) -> U
                 value = text, onValueChange = { text = it },
                 placeholder = { Text(placeholder, fontSize = 22.sp, color = Theme.dim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                 textStyle = LocalTextStyle.current.copy(fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Color.White, textAlign = TextAlign.Center),
-                maxLines = 5,
-                keyboardOptions = KeyboardOptions.Default,
-                keyboardActions = KeyboardActions(onDone = { onDone(text) }),
+                // 多行输入：回车换行（竖排就是换列），点"完成"结束。
+                maxLines = 8,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, cursorColor = Theme.accent,

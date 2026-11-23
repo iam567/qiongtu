@@ -29,6 +29,9 @@ import kotlin.math.tan
  */
 object OverlayDrawing {
     /** 排好版、还没画的一项。 */
+    /** 竖排的一个字：中心横坐标、基线纵坐标。 */
+    class VGlyph(val text: String, val x: Float, val baseline: Float)
+
     class Layout(
         val item: OverlayItem,
         val fontSize: Float,
@@ -39,6 +42,8 @@ object OverlayDrawing {
         val content: RectF,
         val text: StaticLayout?,
         val paint: TextPaint?,
+        /** 竖排时每个字画在哪（相对 content 左上角）；横排是 null，用 text 画。 */
+        val glyphs: List<VGlyph>? = null,
         val fakeBold: Boolean,
         val boxPath: Path?,
     )
@@ -88,13 +93,27 @@ object OverlayDrawing {
             item.align == OverlayAlign.RIGHT -> TextLayout.Alignment.ALIGN_OPPOSITE
             else -> TextLayout.Alignment.ALIGN_CENTER
         }
-        val fitW = ceil(TextLayout.getDesiredWidth(item.text, paint)).toInt() + 2
-        val static = StaticLayout.Builder.obtain(item.text, 0, item.text.length, paint, max(1, fitW))
-            .setAlignment(align)
-            .setLineSpacing(spacing, 1f)
-            .setIncludePad(false)
-            .build()
-        val text = RectF(0f, 0f, fitW.toFloat(), static.height.toFloat() + 2f)
+        // 拉过文字框的边：这个方向上框就是这么长，字排满了自动换行（竖排换列），对齐按这个框来。
+        val wrap = if (!item.isSticker && item.wrap > 0f) max(item.wrap, 1.05f) * fs else 0f
+        val vertical = !item.isSticker && item.vertical
+        var columns: List<VGlyph>? = null
+        val static: StaticLayout
+        val text: RectF
+        if (vertical) {
+            val v = verticalLayout(item, paint, fs, wrap)
+            columns = v.first
+            text = v.second
+            static = StaticLayout.Builder.obtain("", 0, 0, paint, 1).build()
+        } else {
+            val desired = ceil(TextLayout.getDesiredWidth(item.text, paint)).toInt() + 2
+            val fitW = if (wrap > 0f) ceil(wrap).toInt() else desired
+            static = StaticLayout.Builder.obtain(item.text, 0, item.text.length, paint, max(1, fitW))
+                .setAlignment(align)
+                .setLineSpacing(spacing, 1f)
+                .setIncludePad(false)
+                .build()
+            text = RectF(0f, 0f, fitW.toFloat(), static.height.toFloat() + 2f)
+        }
 
         var box: Path? = null
         var anchor = RectF(text)
@@ -109,7 +128,8 @@ object OverlayDrawing {
                 margin = max(margin, max(abs(ox), abs(oy)) + shadowBlur(item, fs) * 1.7f + line)
             }
             if (item.boxOn) {
-                val lines = lineRects(static, paint, text)
+                // 竖排时底色按整块文字画（按行的荧光笔效果只对横排）。
+                val lines = if (vertical) listOf(RectF(text)) else lineRects(static, paint, text)
                 val p = boxShape(item, text, lines, fs)
                 box = p
                 val b = RectF()
@@ -128,7 +148,69 @@ object OverlayDrawing {
         val dy = halfH - cy
         box?.offset(dx, dy)
         text.offset(dx, dy)
-        return Layout(item, fs, (halfW * 2).toInt(), (halfH * 2).toInt(), text, static, paint, fakeBold, box)
+        return Layout(item, fs, (halfW * 2).toInt(), (halfH * 2).toInt(), text, static, paint, columns, fakeBold, box)
+    }
+
+    /** 竖排标点换成竖排写法（直排用的标点形状）。 */
+    private val verticalForms = mapOf(
+        '，' to "︐", '、' to "︑", '。' to "︒", '：' to "︓", '；' to "︔", '！' to "︕", '？' to "︖",
+        '（' to "︵", '）' to "︶", '《' to "︽", '》' to "︾", '〈' to "︿", '〉' to "﹀", '「' to "﹁", '」' to "﹂",
+        '『' to "﹃", '』' to "﹄", '【' to "︻", '】' to "︼", '〔' to "︹", '〕' to "︺", '｛' to "︷", '｝' to "︸",
+        '…' to "︙", '—' to "︱", '–' to "︲", '～' to "≀", '~' to "≀", '(' to "︵", ')' to "︶", ',' to "︐",
+    )
+
+    /**
+     * 竖排：一个字一个字从上往下摆，一列满了（或遇到回车）换到左边一列。
+     * 每列宽度定死：字号 ×（1.25 + 行距）；每个字占一个字高（英文数字窄一点），加字距。
+     * 返回每个字的位置和整块文字的框（左上角为原点）。
+     */
+    private fun verticalLayout(item: OverlayItem, paint: TextPaint, fs: Float, wrap: Float): Pair<List<VGlyph>, RectF> {
+        val pitch = max(fs * 0.8f, fs * (1.25f + item.lineSpacing.coerceIn(-0.3f, 2f)))
+        val kern = if (item.letterSpacing != 0f) fs * item.letterSpacing.coerceIn(-0.2f, 2f) else 0f
+        // letterSpacing 已经设在 paint 上；量字宽时先去掉，免得算两遍。
+        val saved = paint.letterSpacing
+        paint.letterSpacing = 0f
+        class Cell(val s: String, val h: Float)
+        val cols = ArrayList<ArrayList<Cell>>()
+        var col = ArrayList<Cell>()
+        var used = 0f
+        val points = item.text.codePoints().toArray()
+        var i = 0
+        while (i < points.size) {
+            val cp = points[i]
+            i++
+            if (cp == '\n'.code) { cols += col; col = ArrayList(); used = 0f; continue }
+            val raw = String(Character.toChars(cp))
+            val s = if (cp <= 0xFFFF) verticalForms[cp.toChar()] ?: raw else raw
+            val w = paint.measureText(s)
+            val h = (if (w > fs * 0.8f || verticalForms.containsKey(cp.toChar())) fs else max(w, fs * 0.86f)) + kern
+            if (wrap > 0f && col.isNotEmpty() && used + h > wrap + 0.5f) { cols += col; col = ArrayList(); used = 0f }
+            col += Cell(s, h)
+            used += h
+        }
+        cols += col
+        paint.letterSpacing = 0f
+        val fm = paint.fontMetrics
+        val lengths = cols.map { c -> c.sumOf { it.h.toDouble() }.toFloat() - (if (c.isNotEmpty()) kern else 0f) }
+        val height = max(if (wrap > 0f) wrap else 0f, lengths.maxOrNull() ?: 0f)
+        val width = pitch * cols.size
+        val out = ArrayList<VGlyph>()
+        for ((k, c) in cols.withIndex()) {
+            val x = width - pitch * (k + 0.5f)
+            val free = height - lengths[k]
+            var y = when (item.align) {
+                OverlayAlign.LEFT -> 0f
+                OverlayAlign.RIGHT -> free
+                else -> free / 2
+            }
+            for (cell in c) {
+                val glyphH = cell.h - kern
+                out += VGlyph(cell.s, x, y + glyphH / 2 - (fm.ascent + fm.descent) / 2)
+                y += cell.h
+            }
+        }
+        paint.letterSpacing = saved
+        return out to RectF(0f, 0f, ceil(width) + 2f, ceil(height) + 2f)
     }
 
     private fun imageLayout(item: OverlayItem, image: Bitmap, width: Float): Layout? {
@@ -145,7 +227,7 @@ object OverlayDrawing {
         margin = ceil(margin)
         return Layout(
             item, w, (w + margin * 2).toInt(), (h + margin * 2).toInt(),
-            RectF(margin, margin, margin + w, margin + h), null, null, false, null,
+            RectF(margin, margin, margin + w, margin + h), null, null, null, false, null,
         )
     }
 
@@ -292,11 +374,22 @@ object OverlayDrawing {
             c.translate(layout.content.left, layout.content.top)
             paint.strokeJoin = Paint.Join.ROUND
             paint.strokeCap = Paint.Cap.ROUND
+            val cells = layout.glyphs
+            fun body() {
+                if (cells == null) { static.draw(c); return }
+                val savedAlign = paint.textAlign
+                val savedSpacing = paint.letterSpacing
+                paint.textAlign = Paint.Align.CENTER
+                paint.letterSpacing = 0f
+                for (g in cells) c.drawText(g.text, g.x, g.baseline, paint)
+                paint.textAlign = savedAlign
+                paint.letterSpacing = savedSpacing
+            }
             if (line > 0f) {
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = line + bold
                 paint.color = stroke
-                static.draw(c)
+                body()
             }
             if (bold > 0f) {
                 paint.style = Paint.Style.FILL_AND_STROKE
@@ -305,7 +398,7 @@ object OverlayDrawing {
                 paint.style = Paint.Style.FILL
             }
             paint.color = fill
-            static.draw(c)
+            body()
             c.restore()
         }
 
@@ -399,7 +492,7 @@ object OverlayDrawing {
         }
         margin = ceil(margin)
         val rect = RectF(margin, margin, margin + w, margin + h)
-        return Layout(item, w, (w + margin * 2).toInt(), (h + margin * 2).toInt(), rect, null, null, false, graphicPath(g, rect))
+        return Layout(item, w, (w + margin * 2).toInt(), (h + margin * 2).toInt(), rect, null, null, null, false, graphicPath(g, rect))
     }
 
     private fun drawGraphic(layout: Layout, canvas: Canvas) {

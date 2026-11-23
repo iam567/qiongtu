@@ -21,7 +21,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taoo.xiutu.ai.AIClient
+import com.taoo.xiutu.ai.AIError
 import com.taoo.xiutu.ai.AIPresetGroup
+import com.taoo.xiutu.ai.AIRunner
+import com.taoo.xiutu.ai.AISettings
 import com.taoo.xiutu.ai.MalePresets
 import com.taoo.xiutu.editor.EditOp
 import com.taoo.xiutu.editor.EditorModel
@@ -41,6 +45,7 @@ import com.taoo.xiutu.ui.Theme
 import com.taoo.xiutu.ui.XSlider
 import com.taoo.xiutu.ui.sym
 import com.taoo.xiutu.ui.tap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,6 +108,12 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
         private set
     private var lockMask: Bitmap? = null
     private var plate: Warp.Plate? = null
+    /** AI 补背景：开关、正在生成、补好的背景（留着，再打开不用重新花钱）。 */
+    var aiFill by mutableStateOf(false)
+        private set
+    var aiFillBusy by mutableStateOf(false)
+        private set
+    private var aiPlate: Bitmap? = null
     // 变形还原
     var restoring by mutableStateOf(false)
         private set
@@ -226,7 +237,7 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
             }
         }
         p = p.copy(restore = restore)
-        if (protect) p = p.copy(lockMask = lockMask)
+        if (protect) p = p.copy(lockMask = lockMask, aiPlate = if (aiFill) aiPlate else null)
         return p
     }
 
@@ -421,7 +432,7 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
 
     // MARK: 背景保护 / 头部保护 / 变形还原
 
-    /** 开关背景保护。第一次打开时在本机识别一次人像，并补一张"没有人的背景"。 */
+    /** 开关背景保护。第一次打开时在本机识别一次人像，并算好背景变形的权重。 */
     fun changeProtect(on: Boolean) {
         if (protectBusy) return
         error = null
@@ -450,6 +461,63 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
             plate = found?.second
             protect = found != null
             if (found == null) error = "这张图里没有识别到人物，没法保护背景。"
+            render()
+        }
+    }
+
+    /**
+     * AI 补背景：让 AI 把人从照片里去掉、补出后面的背景（计一次费），之后人让出来的地方都用它。
+     * 关掉就回到本机的做法（拉旁边的背景）。
+     */
+    fun changeAIFill(on: Boolean) {
+        if (aiFillBusy) return
+        error = null
+        if (!on) {
+            aiFill = false
+            render()
+            return
+        }
+        // 先确保背景保护开着（要用到人像蒙版）。
+        if (lockMask == null) {
+            changeProtect(true)
+            model.scope.launch {
+                while (protectBusy) kotlinx.coroutines.delay(100)
+                if (alive && lockMask != null) changeAIFill(true)
+            }
+            return
+        }
+        protect = true
+        if (aiPlate != null) {
+            aiFill = true
+            render()
+            return
+        }
+        val base = model.base ?: return
+        val endpoint = AISettings.endpoint() ?: run {
+            error = "还没有设置 ${AISettings.active.shortTitle} 的 API Key。"
+            return
+        }
+        aiFillBusy = true
+        model.scope.launch {
+            var made: Bitmap? = null
+            var failure: String? = null
+            try {
+                AIClient.takeLastUsage()
+                made = AIRunner.run(endpoint, FILL_PROMPT, base, emptyList(), emptyList(), null, appendGuidance = false)
+                AIClient.takeLastUsage()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                failure = (e as? AIError)?.text ?: e.message ?: "请求失败。"
+            }
+            if (!alive) return@launch
+            aiFillBusy = false
+            if (made != null) {
+                aiPlate = made
+                aiFill = true
+            } else {
+                error = failure ?: "AI 没有补出背景，可以再试一次。"
+            }
             render()
         }
     }
@@ -558,8 +626,15 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
             if (mode == ShapeMode.TALL) {
                 Chip("头部保护", selected = headProtect, symbol = if (headBusy) "hourglass" else "person.crop.circle") { changeHeadProtect(!headProtect) }
             } else {
-                Chip("背景保护", selected = protect, symbol = if (protectBusy) "hourglass" else "person.and.background.dotted") { changeProtect(!protect) }
-                Chip("变形还原", selected = restoring, symbol = "bandage") { changeRestoring(!restoring) }
+                Chip("背景保护", selected = protect, symbol = if (protectBusy) "hourglass" else null) {
+                    if (protect) aiFill = false
+                    changeProtect(!protect)
+                }
+                // AI 补背景：打开时让 AI 补一张没有人的背景（计一次费），人让出来的地方用它。
+                Chip("补背景", selected = aiFill && protect, symbol = if (aiFillBusy) "hourglass" else null, badge = "AI") {
+                    changeAIFill(!(aiFill && protect))
+                }
+                Chip("变形还原", selected = restoring) { changeRestoring(!restoring) }
             }
             Spacer(Modifier.weight(1f))
             RoundButton("arrow.uturn.backward") { undo() }
@@ -671,3 +746,9 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
         }
     }
 }
+
+private val FILL_PROMPT =
+    "Remove every person from this photo completely, including their hair, clothes, shadows and anything they are holding. " +
+        "Fill the area where they were with the background that would naturally be behind them: continue the walls, floor, " +
+        "railings, buildings, lights and textures with the same perspective, lighting, color and sharpness as the rest of the photo. " +
+        "Do not add any new people or objects. Keep every other part of the photo exactly the same, same framing and size."
