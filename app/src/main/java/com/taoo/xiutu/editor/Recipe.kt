@@ -59,8 +59,6 @@ data class AIRecipe(
     val strength: Float = 1f,
     val toneOnly: Boolean = false,
     val soften: Float = 0f,
-    /** 大师构图选的哪一种取景。 */
-    val masterFrame: String? = null,
     /** 贴回原图的脸。 */
     val keepFace: Boolean? = null,
     /** 只在变了的地方用 AI 的像素。 */

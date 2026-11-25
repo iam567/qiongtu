@@ -16,13 +16,17 @@ import kotlin.math.roundToInt
  * 没动的地方保持原来的清晰度和质感，不会整张都是 AI 重画出来的涂抹感。
  */
 object ChangeKeep {
-    /** original、ai 一样大。area：只允许在这一块里换（白 = 允许），不给就整张都可以。 */
-    fun apply(g: GpuScope, original: Tex, ai: Tex, area: Tex?): Tex {
+    /**
+     * original、ai 一样大。area：只允许在这一块里换（白 = 允许），不给就整张都可以。
+     * core：这一块一定用 AI 的（换衣服）。
+     */
+    fun apply(g: GpuScope, original: Tex, ai: Tex, area: Tex?, core: Tex? = null): Tex {
         val w = original.width
         val h = original.height
         val long = max(w, h).toFloat()
         // AI 常把整张的明暗颜色带偏一点：先按大范围拉回原图的样子，再比较、再贴。
-        val toned = ToneTransfer.apply(g, ai, original, radius = long * 0.05f)
+        val toned = if (core != null && area != null) tonedByOutside(g, ai, original, area)
+        else ToneTransfer.apply(g, ai, original, radius = long * 0.05f)
         val sigma = long * 0.0028f
         // 蒙版本来就要羽化：在最长 1600 的小图上算，预览和导出一致，也快。
         val k = min(1f, MASK_SIDE / long)
@@ -38,9 +42,22 @@ object ChangeKeep {
         var mask = morphology(g, diff, ml * 0.0012f, grow = false)
         mask = morphology(g, mask, ml * 0.009f, grow = true)
         mask = g.blur(mask, ml * 0.005f * 2.5f)
+        if (core != null) mask = g.pass(MAX, mapOf("src" to mask, "fg" to core), width = mw, height = mh)
         val out = blend(g, original, toned, mask, area)
         g.release(toned)
         return out
+    }
+
+    /**
+     * 只看 area 外面（背景）的色差来校正 AI 图：换衣服时人身上的颜色本来就要变，不能拿来比。
+     * 半径很大，在最长 800 的浮点小图上算。
+     */
+    private fun tonedByOutside(g: GpuScope, ai: Tex, original: Tex, area: Tex): Tex {
+        val k = min(1f, 800f / max(ai.width, ai.height))
+        val w = max(1, (ai.width * k).roundToInt())
+        val h = max(1, (ai.height * k).roundToInt())
+        fun weighted(t: Tex) = g.blur(g.passFloat(OUTSIDE, mapOf("src" to t, "area" to area), width = w, height = h), max(w, h) * 0.12f * 2.5f)
+        return g.pass(OUTSIDE_GAIN, mapOf("src" to ai, "o0" to weighted(original), "a0" to weighted(ai)), width = ai.width, height = ai.height)
     }
 
     /** 蒙版白的地方用 fg（线性光里混合，和 Core Image 一致）；area 不为空时再乘上它。 */
@@ -101,6 +118,30 @@ void main() {
     float m = texture(mask, uv).r;
     if (useArea == 1) m *= texture(area, uv).r;
     o = vec4(toSrgb(mix(toLin(a.rgb), toLin(b.rgb), m)), mix(a.a, b.a, m));
+}
+"""
+
+    private const val MAX = Shaders.HEADER + """
+uniform sampler2D src;
+uniform sampler2D fg;
+void main() { o = vec4(vec3(max(texture(src, uv).r, texture(fg, uv).r)), 1.0); }
+"""
+
+    private const val OUTSIDE = Shaders.HEADER + AIShaders.LINEAR + """
+uniform sampler2D src;
+uniform sampler2D area;
+void main() { o = vec4(toLin(texture(src, uv).rgb) * (1.0 - texture(area, uv).r), 1.0); }
+"""
+
+    private const val OUTSIDE_GAIN = Shaders.HEADER + AIShaders.LINEAR + """
+uniform sampler2D src;
+uniform sampler2D o0;
+uniform sampler2D a0;
+void main() {
+    vec4 s = texture(src, uv);
+    vec3 e = vec3(0.004);
+    vec3 gain = clamp((texture(o0, uv).rgb + e) / (texture(a0, uv).rgb + e), vec3(0.6), vec3(1.7));
+    o = vec4(toSrgb(toLin(s.rgb) * gain), s.a);
 }
 """
 
@@ -201,7 +242,7 @@ void main() {
     }
 
     /** 人和人周围一圈（原图里的人和 AI 图里的人合起来，往外扩一点）。 */
-    fun personArea(a: Mask8?, b: Mask8?, width: Int, height: Int): Mask8? {
+    fun personArea(a: Mask8?, b: Mask8?, width: Int, height: Int, grow: Int = 22, blur: Float = 8f): Mask8? {
         val masks = listOfNotNull(a, b)
         if (masks.isEmpty()) return null
         val k = 640f / max(width, height)
@@ -212,9 +253,9 @@ void main() {
             val s = Mask8.resized(m, w, h)
             for (i in out.indices) if (s[i] > (out[i].toInt() and 255)) out[i] = s.pixels[i]
         }
-        out = dilate(out, w, h, 22)
+        out = dilate(out, w, h, grow)
         val r = Mask8(out, w, h)
-        Mask8.gaussian(r, 8f)
+        Mask8.gaussian(r, blur)
         return r
     }
 

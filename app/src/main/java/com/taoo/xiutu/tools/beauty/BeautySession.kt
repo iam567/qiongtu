@@ -49,6 +49,8 @@ import com.taoo.xiutu.ai.current
 import com.taoo.xiutu.ai.named
 import com.taoo.xiutu.editor.EditOp
 import com.taoo.xiutu.editor.EditorModel
+import com.taoo.xiutu.editor.FaceRescue
+import com.taoo.xiutu.editor.FaceSeeker
 import com.taoo.xiutu.editor.ModeSelectable
 import com.taoo.xiutu.editor.Tool
 import com.taoo.xiutu.editor.ToolSession
@@ -76,7 +78,7 @@ import kotlin.math.roundToInt
  * 美颜：AI 美颜（只把脸部发给服务商）和手动美颜（全部在本机）。
  * 多张脸时每张脸各自保存 AI 结果和手动参数，确认时每张脸的 AI 美颜和手动美颜各算一步。
  */
-class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeSelectable {
+class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeSelectable, FaceSeeker {
     enum class Mode { AI, MANUAL }
 
     var mode by mutableStateOf(Mode.AI)
@@ -160,15 +162,21 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
 
     override fun commitOps(): List<EditOp> = if (running) emptyList() else faceOps()
 
-    override fun onTap(p: PointF) = tapFace(p)
+    override val lacksFace: Boolean get() = faces.isEmpty() && !detectingFaces
+
+    override fun redetectFaces() = detectFaces()
+
+    override fun onTap(p: PointF) {
+        if (!model.faceSearch.tap(p)) tapFace(p)
+    }
 
     // MARK: 找脸
 
     private fun detectFaces() {
-        val b = model.base ?: return
+        if (model.base == null) return
         detectingFaces = true
         model.scope.launch {
-            val found = withContext(Dispatchers.Default) { runCatching { FaceDetector.detect(b) }.getOrDefault(emptyList()) }
+            val found = model.faceSearch.find()
             if (closed) return@launch
             faces = found
             faceStates.clear()
@@ -475,10 +483,7 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                     Text("正在找人脸…", fontSize = 14.sp, color = Color.White)
                 }
-                faces.isEmpty() -> Text(
-                    "这张图里没有找到人脸", fontSize = 13.sp, color = Theme.dim, textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                )
+                faces.isEmpty() -> FaceRescue(model, "这张图里没有找到人脸")
                 else -> {
                     if (faces.size > 1) FacePicker()
                     if (mode == Mode.AI) AISection() else ManualSection()

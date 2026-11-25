@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.sp
 import com.taoo.xiutu.ai.AIPresetGroup
 import com.taoo.xiutu.editor.EditOp
 import com.taoo.xiutu.editor.EditorModel
+import com.taoo.xiutu.editor.FaceRescue
+import com.taoo.xiutu.editor.FaceSeeker
 import com.taoo.xiutu.editor.Tool
 import com.taoo.xiutu.editor.ToolSession
 import com.taoo.xiutu.ml.FaceDetector
@@ -59,7 +61,7 @@ import kotlin.math.roundToInt
 private val ERROR_RED = Color(1f, 0.45f, 0.4f)
 
 /** 面部重塑：按五官关键点做局部变形，另有调颜色的三项和交给 AI 的项目。 */
-class ReshapeSession(model: EditorModel) : ToolSession(model, Tool.RESHAPE) {
+class ReshapeSession(model: EditorModel) : ToolSession(model, Tool.RESHAPE), FaceSeeker {
     // 每张脸的数值、背景保护的蒙版、变形还原的笔画
     private var faces by mutableStateOf<List<ReshapeFace>>(emptyList())
     private var lockMask by mutableStateOf<Bitmap?>(null)
@@ -117,11 +119,10 @@ class ReshapeSession(model: EditorModel) : ToolSession(model, Tool.RESHAPE) {
         val base = model.base ?: return
         detecting = true
         model.scope.launch {
-            val found = withContext(Dispatchers.Default) {
-                runCatching { FaceDetector.detect(base) }.onFailure { it.printStackTrace() }.getOrElse { emptyList() }
-            }
+            val found = model.faceSearch.find()
             if (closed) return@launch
             detecting = false
+            error = null
             faces = found.map { ReshapeFace(it) }
             usable = found.map { ReshapeParams.usable(it, base.width, base.height) }
             if (found.isEmpty()) {
@@ -145,7 +146,12 @@ class ReshapeSession(model: EditorModel) : ToolSession(model, Tool.RESHAPE) {
     }
 
     /** 单击了画面：还原模式下在这里点一下还原一小片；否则点哪张脸就选哪张脸。 */
+    override val lacksFace: Boolean get() = !detecting && !usable.contains(true)
+
+    override fun redetectFaces() = start()
+
     override fun onTap(p: PointF) {
+        if (model.faceSearch.tap(p)) return
         if (detecting) return
         val base = model.base ?: return
         if (restoring) {
@@ -327,10 +333,7 @@ class ReshapeSession(model: EditorModel) : ToolSession(model, Tool.RESHAPE) {
                     Text("正在找人脸…", fontSize = 14.sp, color = Color.White)
                 }
             } else if (err != null && !usable.contains(true)) {
-                Text(
-                    err, fontSize = 13.sp, color = ERROR_RED, textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                )
+                FaceRescue(model, err.trim('。'))
             } else {
                 if (err != null) Text(err, fontSize = 12.sp, color = ERROR_RED, modifier = Modifier.fillMaxWidth())
                 if (category in missing) {

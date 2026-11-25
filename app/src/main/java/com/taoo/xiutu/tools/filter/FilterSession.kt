@@ -216,7 +216,7 @@ class FilterSession(model: EditorModel) : ToolSession(model, Tool.FILTER) {
                     Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                         for (preset in AIPresetGroup.MASTER.presets) {
                             ImageTile(preset.title, masterThumbs[preset.title], symbol = "camera.aperture", badge = "AI") {
-                                model.startMaster(preset)
+                                model.startAIPreset(preset, AIPresetGroup.MASTER)
                             }
                         }
                     }

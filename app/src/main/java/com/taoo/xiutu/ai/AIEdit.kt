@@ -46,6 +46,8 @@ class AIEdit(
     val changedOnly: Boolean = false,
     /** changedOnly 允许换的范围（人和周围一圈，灰度图，白 = 允许）；null = 整张。 */
     val area: Bitmap? = null,
+    /** 换衣服：这一块一定用 AI 的（人身上、下巴以下，灰度图）。 */
+    val core: Bitmap? = null,
     /** AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。 */
     val shift: Pair<Float, Float> = 0f to 0f,
     /** AI 的结果是黑白的：只取光影时把颜色也去掉。 */
@@ -127,7 +129,7 @@ class AIEdit(
                 if (mono) fg = MonoCheck.gray(this, fg)
                 if (areaTex != null) fg = ChangeKeep.blend(this, s, fg, areaTex)
             } else if (changedOnly) {
-                fg = ChangeKeep.apply(this, s, fg, areaTex)
+                fg = ChangeKeep.apply(this, s, fg, areaTex, core?.let { upload(it) })
             }
             if (soften > 0.005f) {
                 // 柔化按贴上去之后的大小算半径：先摆到整张画布上再模糊

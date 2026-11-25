@@ -13,8 +13,11 @@ import com.taoo.xiutu.gpu.Tex
 import com.taoo.xiutu.ml.FaceDetector
 import com.taoo.xiutu.ml.FaceInfo
 import com.taoo.xiutu.tools.shape.V2
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -44,6 +47,19 @@ data class FaceKeep(
         val y = dy * h / long
         return copy(tx = tx + x, ty = ty + y, outline = outline.map { V2(it.x + x, it.y + y) })
     }
+
+    /** 这张脸在 AI 图里基本没动。 */
+    val isStill: Boolean
+        get() {
+            val first = outline.firstOrNull() ?: return false
+            // 反推这一点在原图的位置，看差多少。
+            val n = a * a + b * b
+            val dx = first.x - tx
+            val dy = first.y - ty
+            val x = (a * dx + b * dy) / n
+            val y = (a * dy - b * dx) / n
+            return hypot(x - first.x, y - first.y) < width * 0.12 && abs(sqrt(n) - 1) < 0.04 && abs(atan2(b, a)) < 0.04
+        }
 
     // MARK: 贴回
 

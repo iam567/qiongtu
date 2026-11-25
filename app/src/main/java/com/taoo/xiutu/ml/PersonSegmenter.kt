@@ -19,6 +19,49 @@ object PersonSegmenter {
 
     fun mask(bitmap: Bitmap): Bitmap? = maskData(bitmap)?.toGrayBitmap()
 
+    /** 只留最大的一块和跟它差不多大的：建筑、花纹上零星误认成人的不要。 */
+    fun main(mask: Mask8): Mask8 {
+        val w = 192
+        val h = 192
+        val px = Mask8.resized(mask, w, h)
+        val label = IntArray(w * h)
+        val sizes = arrayListOf(0)
+        val stack = IntArray(w * h)
+        for (start in 0 until w * h) {
+            if (px[start] <= 70 || label[start] != 0) continue
+            val id = sizes.size
+            sizes += 0
+            var top = 0
+            stack[top++] = start
+            label[start] = id
+            var n = 0
+            while (top > 0) {
+                val i = stack[--top]
+                n++
+                val x = i % w
+                val y = i / w
+                fun visit(nx: Int, ny: Int) {
+                    if (nx !in 0 until w || ny !in 0 until h) return
+                    val j = ny * w + nx
+                    if (px[j] > 70 && label[j] == 0) { label[j] = id; stack[top++] = j }
+                }
+                visit(x - 1, y); visit(x + 1, y); visit(x, y - 1); visit(x, y + 1)
+            }
+            sizes[id] = n
+        }
+        val biggest = sizes.max()
+        if (biggest <= 0) return mask
+        // 往外扩两格，别把边缘的半透明切掉。
+        val keep = ByteArray(w * h)
+        for (y in 0 until h) for (x in 0 until w) {
+            val l = label[y * w + x]
+            if (l == 0 || sizes[l] * 4 < biggest) continue
+            for (ny in maxOf(0, y - 2)..minOf(h - 1, y + 2)) for (nx in maxOf(0, x - 2)..minOf(w - 1, x + 2)) keep[ny * w + nx] = -1
+        }
+        val gate = Mask8.resized(Mask8(keep, w, h), mask.w, mask.h)
+        return Mask8(ByteArray(mask.w * mask.h) { (mask[it] * gate[it] / 255).toByte() }, mask.w, mask.h)
+    }
+
     /** 同上，但返回 8 位数据（省一次转换）。 */
     fun maskData(bitmap: Bitmap): Mask8? = synchronized(lock) {
         runCatching {

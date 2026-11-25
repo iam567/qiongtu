@@ -148,9 +148,12 @@ object StyleLUT {
         val cube = FloatArray(COUNT * 3)
         val inv = 1f / (n - 1)
         each { r0, g0, b0, i ->
-            cube[i * 3] = (r0 * inv + out[i * 3]).coerceIn(0f, 1f)
-            cube[i * 3 + 1] = (g0 * inv + out[i * 3 + 1]).coerceIn(0f, 1f)
-            cube[i * 3 + 2] = (b0 * inv + out[i * 3 + 2]).coerceIn(0f, 1f)
+            // 变化太猛的压住：单个颜色最多挪 0.3，避免夸张。
+            val reach = max(abs(out[i * 3]), max(abs(out[i * 3 + 1]), abs(out[i * 3 + 2])))
+            val k = if (reach > 0.3f) 0.3f / reach else 1f
+            cube[i * 3] = (r0 * inv + out[i * 3] * k).coerceIn(0f, 1f)
+            cube[i * 3 + 1] = (g0 * inv + out[i * 3 + 1] * k).coerceIn(0f, 1f)
+            cube[i * 3 + 2] = (b0 * inv + out[i * 3 + 2] * k).coerceIn(0f, 1f)
         }
         return cube
     }

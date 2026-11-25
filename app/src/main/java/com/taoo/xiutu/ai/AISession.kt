@@ -44,6 +44,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taoo.xiutu.ai.outfit.BackPill
+import com.taoo.xiutu.ai.outfit.Outfit
+import com.taoo.xiutu.ai.outfit.OutfitCatalog
+import com.taoo.xiutu.ai.outfit.OutfitMask
+import com.taoo.xiutu.ai.outfit.OutfitPanel
+import com.taoo.xiutu.ai.outfit.OutfitSkirt
 import com.taoo.xiutu.core.Img
 import com.taoo.xiutu.editor.AIRecipe
 import com.taoo.xiutu.editor.AiToolApi
@@ -105,11 +111,6 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
     private var lastPrompt = ""
     /** 大师风格：除了色彩，也按大师的习惯重新构图（默认开）。 */
     var masterCompose by mutableStateOf(true)
-    /** 大师：点了哪一位（先看风格，确定了再生成）、选的哪一种取景、看的哪一组。 */
-    var masterPick by mutableStateOf<String?>(null)
-        private set
-    private var masterFrame by mutableStateOf<String?>(null)
-    private var masterGroup by mutableStateOf(MasterCatalog.groups.firstOrNull() ?: "")
     /** 整张重画时贴回原图的脸：开关，以及这次对上的脸。 */
     private var keepFace by mutableStateOf(true)
     private var faces by mutableStateOf<List<FaceKeep>>(emptyList())
@@ -118,6 +119,17 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
     private var canKeepRest by mutableStateOf(false)
     private var area: Bitmap? = null
     private var shift = 0f to 0f
+    /** 换衣服：这一块一定用 AI 的。 */
+    private var core: Bitmap? = null
+    /** 这次结果是换衣服（结果面板上的说法不一样）。 */
+    private var resultOutfit by mutableStateOf(false)
+    /** 换衣服：点了哪一款、颜色、裙摆、照着换的图；patch = 涂抹补换没换干净的地方。 */
+    var outfitPick by mutableStateOf<Outfit?>(null)
+        private set
+    var outfitColor by mutableStateOf("")
+    var outfitSkirt by mutableStateOf(OutfitSkirt.NORMAL)
+    var outfitReference by mutableStateOf<Bitmap?>(null)
+    private var outfitPatch by mutableStateOf(false)
     /** 这条指令只该动身体的哪一块。 */
     private var part: BodyPart? = null
     private var mono = false
@@ -205,11 +217,38 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         if (run) runAI()
     }
 
-    /** 点了一位大师：先显示风格，点"开始生成"才发给 AI。 */
-    fun pickMaster(title: String?) {
+    fun pickOutfit(outfit: Outfit?) {
         error = null
-        masterPick = title
-        masterFrame = title?.let { MasterCatalog.byTitle[it]?.frames?.firstOrNull()?.title }
+        outfitPick = outfit
+        if (outfit != null && outfitColor !in outfit.colors) outfitColor = outfit.colors.firstOrNull() ?: ""
+        if (outfit?.skirt != true) outfitSkirt = OutfitSkirt.NORMAL
+    }
+
+    fun runOutfit(prompt: String, title: String) {
+        error = null
+        this.prompt = prompt
+        presetTitle = title
+        faceCrop = false
+        hairCrop = false
+        toneOnly = false
+        part = null
+        runAI()
+    }
+
+    /** 没换干净的地方：涂一下只补那一块。 */
+    private fun runOutfitPatch() {
+        if (!hasRegion) {
+            error = "先涂抹没换干净的地方。"
+            return
+        }
+        runOutfit(OutfitCatalog.PATCH_PROMPT, "补换")
+    }
+
+    /** 结果大体满意、只差一小块：先把结果定下来，再进补换。 */
+    private fun startOutfitPatch() {
+        if (running || model.isBusy) return
+        val m = model
+        m.commitTool { m.beginAI(AIPresetGroup.OUTFIT) { it.outfitPatch = true } }
     }
 
     override fun commitOps(): List<EditOp> {
@@ -269,7 +308,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         if (resultReframed) return AIEdit(r, emptyList(), reframed = true, soften = soft, recipe = recipe, faces = kept, mono = mono)
         val e = AIEdit(
             r, strokes, frame, ellipse, strength, toneOnly, shared = lastEdit?.takeIf { it.result === r }, soften = soft, recipe = recipe,
-            faces = kept, changedOnly = canKeepRest && changedOnly, area = area, shift = shift, mono = mono,
+            faces = kept, changedOnly = canKeepRest && changedOnly, area = area, core = core, shift = shift, mono = mono,
         )
         lastEdit = e
         return e
@@ -342,6 +381,8 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         mono = false
         canKeepRest = false
         area = null
+        core = null
+        resultOutfit = false
         shift = 0f to 0f
         colorLift = emptyList()
         colorBase = null
@@ -376,10 +417,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         lastPrompt = basePrompt
         // 记下怎么发起的：涂抹出来的和原图位置绑定，不能套到别的照片上。
         pendingRecipe = if (hasRegion || basePrompt.contains("涂抹区域")) null
-        else AIRecipe(
-            group.name, basePrompt, presetTitle, masterCompose, faceCrop, hairCrop, reframe.name,
-            masterFrame = if (group == AIPresetGroup.MASTER) masterFrame else null,
-        )
+        else AIRecipe(group.name, basePrompt, presetTitle, masterCompose, faceCrop, hairCrop, reframe.name)
         ellipse = null
         resultReframed = false
         val composeBase = model.base
@@ -390,7 +428,6 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
             // 先在本机看看照片里有没有人：没人的场景照用场景版指令，免得 AI 照着"人物居中"之类的描述加个人进去。
             val round = regenRound
             val title = presetTitle
-            val pickedFrame = masterFrame
             frame = null
             toneOnly = false
             error = null
@@ -401,7 +438,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                 val hasPerson = withContext(Dispatchers.Default) { MasterCompose.hasPerson(composeBase) }
                 if (closed || gen != generation) return@launch
                 running = false
-                val recomposed = MasterCompose.prompt(basePrompt, title, pickedFrame, hasPerson) ?: return@launch
+                val recomposed = MasterCompose.prompt(basePrompt, title, hasPerson) ?: return@launch
                 val rp = if (round > 0) recomposed + AIVariation.clause(AIPresetGroup.MASTER, round, recompose = true, hasPerson = hasPerson) else recomposed
                 launchAI(rp, emptyList(), null, guidance = false, identity = hasPerson, recomposed = true)
             }
@@ -417,6 +454,28 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         }
         if (p.contains("涂抹区域") && !hasRegion) {
             error = "先在图上涂抹要去掉的东西，再点发送。"
+            return
+        }
+        // 换衣服（点的款式，或者自己写的要换衣服）：只发人这一块，背景、脸、头都用原图。
+        val typed = presetTitle.isEmpty() && group != AIPresetGroup.OUTFIT && AIIntent.changesClothes(basePrompt)
+        if (!hasRegion && (group == AIPresetGroup.OUTFIT || typed) && composeBase != null) {
+            val text = if (p.contains(OutfitCatalog.KEEP)) p else p + "。" + OutfitCatalog.CLEAN + OutfitCatalog.KEEP
+            // 点款式的看选的裙摆；自己写的看说没说裙摆要溢出去。
+            val overflow = if (presetTitle.isEmpty()) OutfitCatalog.saysOverflow(basePrompt)
+            else outfitSkirt == OutfitSkirt.OVERFLOW && outfitPick != null
+            val references = if (group == AIPresetGroup.OUTFIT) listOfNotNull(outfitReference) else emptyList()
+            frame = null
+            toneOnly = false
+            error = null
+            running = true
+            started = System.currentTimeMillis()
+            val gen = ++generation
+            job = model.scope.launch {
+                val crop = if (overflow) null else withContext(Dispatchers.Default) { runCatching { OutfitMask.crop(composeBase) }.getOrNull() }
+                if (closed || gen != generation) return@launch
+                running = false
+                launchAI(text, emptyList(), crop, guidance = false, references = references, outfit = true, overflow = overflow)
+            }
             return
         }
         val base = model.base
@@ -501,7 +560,6 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         prompt = r.prompt
         presetTitle = r.presetTitle
         masterCompose = r.masterCompose
-        masterFrame = r.masterFrame
         faceCrop = r.faceCrop
         hairCrop = r.hairCrop
         reframe = AIReframe.entries.firstOrNull { it.name == r.reframe } ?: AIReframe.ORIGINAL
@@ -595,6 +653,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
     private fun launchAI(
         prompt: String, strokes: List<MosaicStroke>, crop: RectF?, guidance: Boolean,
         identity: Boolean = false, reframe: AIReframe = AIReframe.ORIGINAL, recomposed: Boolean = false,
+        references: List<Bitmap> = emptyList(), outfit: Boolean = false, overflow: Boolean = false,
     ) {
         if (closed) return
         val proxy = model.proxy ?: return
@@ -620,9 +679,9 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         val lifted = colorLift.isNotEmpty()
         // 整张重画、还是同一个人的这几组：出来以后把原图的脸贴回去。
         val whole = crop == null && strokes.isEmpty()
-        var before = if (whole && group in FACE_GROUPS) model.base else null
+        var before = if (outfit || whole && group in FACE_GROUPS) model.base else null
         // 只动一部分的这两组：没动的地方用原图。
-        var rest = if (whole && !recomposed && reframe == AIReframe.ORIGINAL &&
+        var rest = if (outfit || whole && !recomposed && reframe == AIReframe.ORIGINAL &&
             (group == AIPresetGroup.BODY || group == AIPresetGroup.REMOVE)
         ) model.base else null
         val bodyOnly = group == AIPresetGroup.BODY
@@ -641,22 +700,41 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         job = model.scope.launch {
             try {
                 var under: Bitmap? = null
+                if (recomposed) {
+                    // 重新取景的结果里脸可能很小：对脸用大一点的图。
+                    before = withContext(Dispatchers.Default) { Img.downscale(EditOp.applyAll(sentOps, proxy), 2560) }
+                }
+                if (outfit) {
+                    // 脸在画面里可能很小：比较和找脸用大一点的图。
+                    val big = withContext(Dispatchers.Default) { Img.downscale(EditOp.applyAll(sentOps, proxy), 3072) }
+                    before = big
+                    rest = big
+                }
                 if (lifted) {
                     // 比较和贴脸都用没盖滤镜的底图。
                     under = withContext(Dispatchers.Default) { Img.downscale(EditOp.applyAll(sentOps, proxy), EditorModel.PREVIEW_SIDE) }
-                    if (before != null) before = under
-                    if (rest != null) rest = under
+                    if (before != null && !outfit) before = under
+                    if (rest != null && !outfit) rest = under
                 }
-                val image = AIRunner.run(endpoint, prompt, proxy, sentOps, sent, crop, guidance, reframe)
+                val piece = AIRunner.run(endpoint, prompt, proxy, sentOps, sent, crop, guidance, reframe, references)
+                // 换衣服只发了人这一块：拼回整张，后面就和发整张的一样处理。
+                val image = if (outfit && crop != null) {
+                    withContext(Dispatchers.Default) { OutfitMask.paste(piece, crop, EditOp.applyAll(sentOps, proxy)) }
+                } else piece
                 // 用量 AIClient 已经记过了，这里只取来显示
                 val usage = AIClient.takeLastUsage()
-                val found = withContext(Dispatchers.Default) { examine(image, before, rest, bodyOnly, bodyPart) }
+                val found = withContext(Dispatchers.Default) { examine(image, before, rest, bodyOnly, bodyPart, outfit, overflow) }
                 if (closed || gen != generation) return@launch
                 colorBase = under
                 faces = found.faces
+                // 大师保持最早的样子：默认用 AI 的脸，想要原图的脸再切过去。
+                keepFace = group != AIPresetGroup.MASTER
                 mono = found.mono
                 shift = found.shift
                 area = found.area
+                core = found.core
+                resultOutfit = outfit
+                if (outfit) frame = null
                 canKeepRest = rest != null
                 usageText = usage?.summary
                 result = image
@@ -676,10 +754,12 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         }
     }
 
-    private class Examined(val faces: List<FaceKeep>, val mono: Boolean, val shift: Pair<Float, Float>, val area: Bitmap?)
+    private class Examined(val faces: List<FaceKeep>, val mono: Boolean, val shift: Pair<Float, Float>, val area: Bitmap?, val core: Bitmap?)
 
     /** 结果出来以后在本机看一遍：整体偏了多少、人在哪、脸对不对得上、是不是黑白的。 */
-    private fun examine(image: Bitmap, before: Bitmap?, rest: Bitmap?, bodyOnly: Boolean, bodyPart: BodyPart?): Examined {
+    private fun examine(
+        image: Bitmap, before: Bitmap?, rest: Bitmap?, bodyOnly: Boolean, bodyPart: BodyPart?, outfit: Boolean, overflow: Boolean,
+    ): Examined {
         val shift = rest?.let { runCatching { ChangeKeep.shift(it, image) }.getOrNull() } ?: (0f to 0f)
         var area: Mask8? = null
         if (bodyOnly && rest != null) {
@@ -690,9 +770,18 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
             if (limit != null) area = ChangeKeep.intersect(area, limit)
         }
         // 五官是在没对齐的 AI 图上量的，跟着整体平移一起挪。
-        val faces = before?.let { runCatching { FaceKeep.match(it, image) }.getOrNull() }.orEmpty()
+        var faces = before?.let { runCatching { FaceKeep.match(it, image) }.getOrNull() }.orEmpty()
             .map { it.moved(shift.first, shift.second, image.width, image.height) }
-        return Examined(faces, MonoCheck.isMono(image), shift, area?.toGrayBitmap())
+        var core: Mask8? = null
+        if (outfit && rest != null) {
+            // 头基本没挪（位置差不到脸宽的 12%、大小差不到 4%）就整个头用原图；挪了就按五官对齐贴脸。
+            val still = faces.isNotEmpty() && faces.all { it.isStill }
+            val masks = OutfitMask.masks(rest, image, overflow, keepHead = still)
+            area = masks.area
+            core = masks.core
+            if (still) faces = emptyList()
+        }
+        return Examined(faces, MonoCheck.isMono(image), shift, area?.toGrayBitmap(), core?.toGrayBitmap())
     }
 
     /** 美体里换到"手动美体"：已经做出来的修改先保留成一步，再换过去。 */
@@ -768,17 +857,10 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
     /** 点一个功能就直接开始。需要补充内容的（比如"换背景"）先弹出输入框，写完自动开始。 */
     @Composable
     private fun ComposeControls() {
-        val picked = if (group == AIPresetGroup.MASTER) masterPick?.let { MasterCatalog.byTitle[it] } else null
-        if (picked != null) {
-            MasterCard(
-                picked, toneThumbs[picked.title], masterCompose, masterFrame,
-                onFrame = { masterCompose = true; masterFrame = it },
-                onOriginal = { masterCompose = false },
-                onBack = { pickMaster(null) },
-                onStart = { start(AIPreset(title = picked.title, prompt = picked.prompt)) },
-            )
-        } else {
-            Tiles()
+        when {
+            group != AIPresetGroup.OUTFIT -> Tiles()
+            outfitPatch -> PatchControls()
+            else -> OutfitPanel(this, ::custom)
         }
     }
 
@@ -798,8 +880,9 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                 GenderToggle()
             }
             if (group == AIPresetGroup.MASTER) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (name in MasterCatalog.groups) Chip(name, selected = masterGroup == name) { masterGroup = name }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Chip("大师构图", selected = masterCompose, symbol = "viewfinder") { masterCompose = true }
+                    Chip("原构图", selected = !masterCompose, symbol = "rectangle") { masterCompose = false }
                 }
             }
             if (group == AIPresetGroup.COMPOSE) {
@@ -810,17 +893,13 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                     }
                 }
             }
-            key(group, if (group == AIPresetGroup.CREATIVE) creativeKind else if (group == AIPresetGroup.MASTER) masterGroup else null, GenderSetting.isMale) {
+            key(group, if (group == AIPresetGroup.CREATIVE) creativeKind else null, GenderSetting.isMale) {
                 Row(
                     Modifier.bleed(16.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 6.dp, bottom = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(if (pictures) 10.dp else 4.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
-                    val list = when (group) {
-                        AIPresetGroup.CREATIVE -> creativeKind.presets
-                        AIPresetGroup.MASTER -> MasterCatalog.presets.filter { MasterCatalog.byTitle[it.title]?.group == masterGroup }
-                        else -> group.presets
-                    }
+                    val list = if (group == AIPresetGroup.CREATIVE) creativeKind.presets else group.presets
                     if (group == AIPresetGroup.COMPOSE) {
                         FeatureTile(Tool.SMART_CROP.symbol, Tool.SMART_CROP.title, badge = "AI") {
                             if (!model.isBusy) model.commitTool { model.begin(Tool.SMART_CROP) }
@@ -831,9 +910,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                         when {
                             group == AIPresetGroup.CREATIVE && toneThumbs[preset.title] == null ->
                                 CreativeArtTile(preset.title, preset.symbol, creativeKind) { start(preset) }
-                            master -> ImageTile(preset.title, toneThumbs[preset.title] ?: photoThumb, symbol = group.symbol, badge = "AI") {
-                                if (group == AIPresetGroup.MASTER) pickMaster(preset.title) else start(preset)
-                            }
+                            master -> ImageTile(preset.title, toneThumbs[preset.title] ?: photoThumb, symbol = group.symbol, badge = "AI") { start(preset) }
                             tint != null -> ColorTile(tint, preset.title) { start(preset) }
                             group == AIPresetGroup.HAIR_STYLE ->
                                 ImageTile(preset.title, HairArt.image(preset.title), symbol = preset.symbol, badge = "AI") { start(preset) }
@@ -847,14 +924,31 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                     }
                 }
             }
-            val any = strokeCount > 0
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("涂抹", fontSize = 13.sp, color = Theme.dim)
-                XSlider(brush, { brush = it }, 14f..100f, Modifier.weight(1f))
-                SmallButton("eraser", active = erasing) { erasing = !erasing }
-                SmallButton("arrow.uturn.backward", active = false, Modifier.alpha(if (any) 1f else 0.35f)) { undoStroke() }
-                SmallButton("trash", active = false, Modifier.alpha(if (any) 1f else 0.35f)) { clearRegion() }
+            BrushRow()
+        }
+    }
+
+    /** 换衣服没换干净：涂抹，再点"补换"。 */
+    @Composable
+    private fun PatchControls() {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            BrushRow()
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                BackPill("返回") { outfitPatch = false }
+                AIMainButton("补换涂抹的地方", Modifier.weight(1f).alpha(if (strokeCount > 0) 1f else 0.4f)) { runOutfitPatch() }
             }
+        }
+    }
+
+    @Composable
+    private fun BrushRow() {
+        val any = strokeCount > 0
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("涂抹", fontSize = 13.sp, color = Theme.dim)
+            XSlider(brush, { brush = it }, 14f..100f, Modifier.weight(1f))
+            SmallButton("eraser", active = erasing) { erasing = !erasing }
+            SmallButton("arrow.uturn.backward", active = false, Modifier.alpha(if (any) 1f else 0.35f)) { undoStroke() }
+            SmallButton("trash", active = false, Modifier.alpha(if (any) 1f else 0.35f)) { clearRegion() }
         }
     }
 
@@ -864,8 +958,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         presetTitle = preset.title
         faceCrop = preset.faceCrop
         hairCrop = preset.hairCrop
-        // 大师"原构图"：只取 AI 的光影和颜色，细节全用原图，脸上不会有涂抹感。
-        toneOnly = preset.toneOnly || (group == AIPresetGroup.MASTER && !masterCompose)
+        toneOnly = preset.toneOnly
         part = preset.part
         if (preset.prompt.endsWith("：")) editPrompt() else runAI()
     }
@@ -921,7 +1014,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
             }
             if (canKeepRest && !toneOnly) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Chip("只换变了的地方", changedOnly) { setChangedOnlyMode(true) }
+                    Chip(if (resultOutfit) "只换衣服" else "只换变了的地方", changedOnly) { setChangedOnlyMode(true) }
                     Chip("完整采用 AI 图", !changedOnly) { setChangedOnlyMode(false) }
                 }
             }
@@ -948,6 +1041,9 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                     "${(soften * 100).roundToInt()}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
                     textAlign = TextAlign.End, modifier = Modifier.width(34.dp),
                 )
+            }
+            if (resultOutfit || (group == AIPresetGroup.OUTFIT && outfitPatch)) {
+                WideButton("有地方没换干净，涂抹补换", "paintbrush", null, Modifier.fillMaxWidth()) { startOutfitPatch() }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (!resultFused) WideButton("再生成一次", "arrow.clockwise", "AI", Modifier.weight(1f)) { runAI() }

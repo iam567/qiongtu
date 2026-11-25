@@ -71,11 +71,7 @@ fun MakeupPanel(s: MakeupSession) {
                 Text("正在找人脸…", fontSize = 14.sp, color = Color.White)
             }
         } else if (local && s.faces.isEmpty()) {
-            Text(
-                if (s.unreliable) "这张脸太小或者太侧，五官定位不准，没法上妆。" else "这张图里没有找到人脸。",
-                fontSize = 13.sp, color = Color(1f, 0.45f, 0.4f), textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(vertical = 44.dp),
-            )
+            com.taoo.xiutu.editor.FaceRescue(s.model, if (s.unreliable) "这张脸太小或者太侧，五官定位不准" else "这张图里没有找到人脸")
         } else {
             Header(s)
             if (local) AmountSlider(s)

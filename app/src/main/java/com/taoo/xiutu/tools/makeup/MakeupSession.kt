@@ -15,6 +15,8 @@ import com.taoo.xiutu.ai.maleLooks
 import com.taoo.xiutu.core.Img
 import com.taoo.xiutu.editor.EditOp
 import com.taoo.xiutu.editor.EditorModel
+import com.taoo.xiutu.editor.FaceRescue
+import com.taoo.xiutu.editor.FaceSeeker
 import com.taoo.xiutu.editor.Tool
 import com.taoo.xiutu.editor.ToolSession
 import com.taoo.xiutu.ml.FaceInfo
@@ -30,7 +32,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** 美妆：按人脸关键点上妆（口红、眉毛、眼妆、修容、腮红），美甲和装饰交给 AI。 */
-class MakeupSession(model: EditorModel) : ToolSession(model, Tool.MAKEUP) {
+class MakeupSession(model: EditorModel) : ToolSession(model, Tool.MAKEUP), FaceSeeker {
     var faces by mutableStateOf<List<FaceInfo>>(emptyList())
         private set
     var detecting by mutableStateOf(false)
@@ -73,9 +75,9 @@ class MakeupSession(model: EditorModel) : ToolSession(model, Tool.MAKEUP) {
         val b = model.base ?: return
         detecting = true
         jobs += model.scope.launch {
+            val list = model.faceSearch.find()
             val found = withContext(Dispatchers.Default) {
-                runCatching { MakeupFaces.detect(b) }.getOrElse { emptyList() }
-                    .map { it to (runCatching { MKTone.measure(it, b) }.getOrNull() ?: MKTone()) }
+                list.map { it to (runCatching { MKTone.measure(it, b) }.getOrNull() ?: MKTone()) }
             }
             if (closed) return@launch
             val usable = found.filter { it.first.hasReliableLandmarks && it.first.outerLips.size >= 6 }
@@ -102,7 +104,12 @@ class MakeupSession(model: EditorModel) : ToolSession(model, Tool.MAKEUP) {
     override val wantsTap: Boolean get() = true
 
     /** 单击了画面：正在点痣就落一颗痣，否则点到哪张脸就切到哪张。 */
+    override val lacksFace: Boolean get() = !detecting && faces.isEmpty() && category.isLocal
+
+    override fun redetectFaces() = start()
+
     override fun onTap(p: PointF) {
+        if (model.faceSearch.tap(p)) return
         val face = current
         if (placingMole && face != null) {
             val box = face.face.box

@@ -91,6 +91,26 @@ object SmartCrop {
         return out
     }
 
+    /** 读一组框（找脸用）。 */
+    fun boxes(text: String, key: String): List<CropRect> {
+        val dict = jsonIn(text, "{\"$key\"") as? JsonObject ?: return emptyList()
+        return (dict[key] as? JsonArray).orEmpty().mapNotNull { item ->
+            val o = item as? JsonObject ?: return@mapNotNull null
+            var b = numbers(o["box"])
+            if (b.size != 4) {
+                val yx = numbers(o["box_2d"])
+                if (yx.size != 4) return@mapNotNull null
+                b = listOf(yx[1], yx[0], yx[3], yx[2])
+            }
+            val k = if (b.max() <= 1.001f) 1f else 1000f
+            val x0 = (min(b[0], b[2]) / k).coerceIn(0f, 1f)
+            val x1 = (max(b[0], b[2]) / k).coerceIn(0f, 1f)
+            val y0 = (min(b[1], b[3]) / k).coerceIn(0f, 1f)
+            val y1 = (max(b[1], b[3]) / k).coerceIn(0f, 1f)
+            if (x1 - x0 < 0.004f || y1 - y0 < 0.004f) null else CropRect(x0, y0, x1 - x0, y1 - y0)
+        }
+    }
+
     private fun short(value: JsonElement?, limit: Int, fallback: String): String {
         val text = (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim().orEmpty()
         return if (text.isEmpty()) fallback else text.take(limit)
@@ -100,13 +120,13 @@ object SmartCrop {
         (value as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull()?.toFloat() }
 
     /** 回复里可能夹着思考过程或 ``` 代码块：从后往前找能解析的那一段。 */
-    private fun jsonIn(text: String): JsonElement? {
+    private fun jsonIn(text: String, key: String = "{\"crops\""): JsonElement? {
         fun parse(s: String): JsonElement? =
             runCatching { Json.parseToJsonElement(s) }.getOrNull()?.takeIf { it is JsonObject || it is JsonArray }
         parse(text)?.let { return it }
         val end = text.lastIndexOf('}')
         if (end < 0) return null
-        var start = text.indexOf("{\"crops\"").takeIf { it >= 0 } ?: text.indexOf('{')
+        var start = text.indexOf(key).takeIf { it >= 0 } ?: text.indexOf('{')
         while (start in 0 until end) {
             parse(text.substring(start, end + 1))?.let { return it }
             start = text.indexOf('{', start + 1)

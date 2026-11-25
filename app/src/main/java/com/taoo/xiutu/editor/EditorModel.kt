@@ -207,6 +207,9 @@ class EditorModel(val context: Context) {
         if (draftEnabled) DraftStore.clear()
     }
 
+    /** 找脸：美颜、面部重塑、美妆、皮肤共用。 */
+    val faceSearch = FaceSearch(this)
+
     // MARK: 工具进出
 
     /** 打开一个新工具（不走"重新打开"）。 */
@@ -219,6 +222,14 @@ class EditorModel(val context: Context) {
         return s
     }
 
+    /** 打开 AI 修图的某一组，ready 在打开之后调用。 */
+    fun beginAI(group: AIPresetGroup, ready: (com.taoo.xiutu.ai.AISession) -> Unit) {
+        beginLifting(Tool.AI) { s ->
+            (s as? AiToolApi)?.setup(group, "", null, run = false)
+            (s as? com.taoo.xiutu.ai.AISession)?.let(ready)
+        }
+    }
+
     /** 打开 AI 修图的某一组。 */
     fun beginAI(group: AIPresetGroup, prompt: String = "", preset: AIPreset? = null, run: Boolean = false) {
         beginLifting(Tool.AI) { s -> (s as? AiToolApi)?.setup(group, prompt, preset, run) }
@@ -228,17 +239,6 @@ class EditorModel(val context: Context) {
     fun startAIPreset(preset: AIPreset, group: AIPresetGroup = AIPresetGroup.FIX) {
         if (isBusy || session?.busy == true) return
         commitTool { beginAI(group, preset.prompt, preset, run = true) }
-    }
-
-    /** 从滤镜里点了一位大师：转到 AI 修图，先显示这位大师的风格。 */
-    fun startMaster(preset: AIPreset) {
-        if (isBusy || session?.busy == true) return
-        commitTool {
-            beginLifting(Tool.AI) { s ->
-                (s as? AiToolApi)?.setup(AIPresetGroup.MASTER, "", null, run = false)
-                (s as? com.taoo.xiutu.ai.AISession)?.pickMaster(preset.title)
-            }
-        }
     }
 
     /** 直接显示一张预览图。只在有工具打开时生效。 */

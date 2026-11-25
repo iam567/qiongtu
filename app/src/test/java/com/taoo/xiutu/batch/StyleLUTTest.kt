@@ -63,4 +63,15 @@ class StyleLUTTest {
         assertEquals(0.6f, o[1], 1e-3f)
         assertEquals(0.9f, o[2], 1e-3f)
     }
+
+    /** 变化太猛的压住：单个颜色最多挪 0.3。 */
+    @Test fun capped() {
+        val (a, _) = sample(120, 90)
+        val b = FloatArray(a.size) { 1 - a[it] }
+        val cube = StyleLUT.fit(a, b, 120, 90)!!
+        for (i in 0 until a.size / 3) {
+            val o = StyleLUT.map(cube, a[i * 3], a[i * 3 + 1], a[i * 3 + 2])
+            for (c in 0..2) assertTrue(abs(o[c] - a[i * 3 + c]) < 0.301f)
+        }
+    }
 }

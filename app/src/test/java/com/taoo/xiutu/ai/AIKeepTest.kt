@@ -1,6 +1,11 @@
 package com.taoo.xiutu.ai
 
+import com.taoo.xiutu.ai.outfit.OutfitCatalog
+import com.taoo.xiutu.ai.outfit.OutfitMask
+import com.taoo.xiutu.ai.outfit.OutfitSkirt
 import com.taoo.xiutu.editor.EditOp
+import com.taoo.xiutu.ml.Mask8
+import com.taoo.xiutu.ml.PersonSegmenter
 import com.taoo.xiutu.tools.adjust.AdjustKey
 import com.taoo.xiutu.tools.adjust.AdjustOp
 import com.taoo.xiutu.tools.adjust.AdjustParams
@@ -12,6 +17,7 @@ import com.taoo.xiutu.tools.filter.LookOp
 import com.taoo.xiutu.tools.shape.ShapeAI
 import com.taoo.xiutu.tools.shape.ShapeItem
 import com.taoo.xiutu.tools.shape.V2
+import com.taoo.xiutu.tools.smartcrop.SmartCrop
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -104,25 +110,73 @@ class AIKeepTest {
     }
 
     @Test fun masters() {
-        MasterCatalog.load(File("src/main/assets/masters.json").readText())
-        assertEquals(47, MasterCatalog.all.size)
-        assertEquals(47, MasterCatalog.byTitle.size)
-        assertTrue(MasterCatalog.groups.size in 5..12)
-        val m = MasterCatalog.all.first()
-        assertTrue(m.prompt.contains(MasterCompose.KEEP_TAIL))
-        val person = MasterCompose.prompt(m.prompt, m.title, m.frames[1].title, hasPerson = true)!!
-        assertTrue(m.frames[1].person in person && MasterCompose.REAL_TAIL in person && MasterCompose.KEEP_TAIL !in person)
-        val scene = MasterCompose.prompt(m.prompt, m.title, null, hasPerson = false)!!
-        assertTrue(m.frames[0].scene in scene && "结果里也不能出现任何人" in scene)
-        assertNull(MasterCompose.prompt("随便写的", m.title, null, hasPerson = true))
-        assertNull(MasterCompose.prompt(m.prompt, "没有这个人", null, hasPerson = true))
+        val list = AIPresetGroup.MASTER.presets
+        assertEquals(22, list.size)
+        for (m in list) {
+            assertTrue(m.title, MasterCompose.prompt(m.prompt, m.title, hasPerson = true) != null)
+            assertTrue(m.title, MasterCompose.prompt(m.prompt, m.title, hasPerson = false) != null)
+            assertTrue(m.title, "黑白" !in m.prompt.replace("不要变成黑白", ""))
+        }
+        assertEquals(9, list.count { "画面保持彩色，不要变成黑白" in it.prompt })
+    }
+
+    @Test fun outfits() {
+        OutfitCatalog.load(File("src/main/assets/outfits.json").readText())
+        assertEquals(51, OutfitCatalog.all.size)
+        assertTrue(OutfitCatalog.groups(true).isNotEmpty() && OutfitCatalog.groups(false).size >= 4)
+        for (o in OutfitCatalog.all) for (c in o.colors) assertNotNull("${o.title} $c", OutfitCatalog.rgb(c))
+        val gown = OutfitCatalog.all.first { it.skirt }
+        val p = OutfitCatalog.prompt(gown, "粉色", OutfitSkirt.OVERFLOW)
+        assertTrue(gown.prompt in p && "颜色是粉色。裙摆做得极大" in p && p.endsWith(OutfitCatalog.KEEP))
+        assertTrue(AIIntent.replacesContent(OutfitCatalog.PATCH_PROMPT))
+        assertTrue(AIIntent.changesClothes("给她换一件红色礼服") && !AIIntent.changesClothes("把天空换成晚霞") && !AIIntent.changesClothes("裙子颜色深一点"))
+    }
+
+    /** 换衣服裁多大：人占一小块时裁人和两边余量；人占满时不裁。 */
+    @Test fun outfitCrop() {
+        fun mask(x0: Int, y0: Int, x1: Int, y1: Int) =
+            Mask8(ByteArray(128 * 128) { if (it % 128 in x0..x1 && it / 128 in y0..y1) -1 else 0 }, 128, 128)
+        val b = OutfitMask.cropBox(mask(58, 40, 70, 110), 3000f, 2000f)!!
+        assertTrue(b[0] < 58 / 128f - 0.04f && b[2] > 71 / 128f + 0.04f && b[1] < 40 / 128f && b[3] > 111 / 128f)
+        assertTrue((b[3] - b[1]) * 2000 <= (b[2] - b[0]) * 3000 * 2.2f + 1)
+        assertNull(OutfitMask.cropBox(mask(20, 5, 110, 127), 2000f, 3000f))
+        assertNull(OutfitMask.cropBox(Mask8(ByteArray(128 * 128), 128, 128), 2000f, 3000f))
+    }
+
+    /** 零星误认成人的小块去掉，差不多大的两个人都留下。 */
+    @Test fun mainPerson() {
+        val w = 192
+        val px = ByteArray(w * w)
+        fun box(x0: Int, y0: Int, s: Int) { for (y in y0 until y0 + s) for (x in x0 until x0 + s) px[y * w + x] = -1 }
+        box(20, 20, 60); box(120, 20, 40); box(20, 150, 12)
+        val m = PersonSegmenter.main(Mask8(px, w, w))
+        assertEquals(255, m[50 * w + 50])
+        assertEquals(255, m[40 * w + 140])
+        assertEquals(0, m[155 * w + 25])
+    }
+
+    @Test fun stillFace() {
+        val o = listOf(V2(0.4f, 0.4f), V2(0.6f, 0.4f), V2(0.5f, 0.6f))
+        assertTrue(FaceKeep(1.01, 0.01, 0.002, -0.004, o, 0.2f).isStill)
+        assertTrue(!FaceKeep(1.0, 0.0, 0.05, 0.0, o, 0.2f).isStill)
+        assertTrue(!FaceKeep(1.1, 0.0, -0.04, -0.04, o, 0.2f).isStill)
+    }
+
+    @Test fun faceTiles() {
+        assertEquals(listOf(0f, 0.3f, 0.5f), com.taoo.xiutu.ml.FaceFinder.starts(0.5f))
+        assertEquals(0.82f, com.taoo.xiutu.ml.FaceFinder.starts(0.18f).last(), 1e-5f)
+        val boxes = SmartCrop.boxes("<think>{看}</think>{\"faces\":[{\"box\":[420,180,560,360]},{\"box\":[1,1,2,2]},{\"box_2d\":[0.1,0.2,0.3,0.4]}]}", "faces")
+        assertEquals(2, boxes.size)
+        assertEquals(0.42f, boxes[0].x, 1e-5f)
+        assertEquals(0.2f, boxes[1].x, 1e-5f)
+        assertTrue(SmartCrop.boxes("{\"faces\":[]}", "faces").isEmpty())
     }
 
     /** 只动一个部位的加上限制；体态类的不说"姿势不变"。 */
     @Test fun shapePrompts() {
         val chest = ShapeAI.preset(ShapeItem.AI_CHEST)!!
         assertEquals(BodyPart.CHEST, chest.part)
-        assertTrue("手、头发、腰腹和背景都不动" in chest.prompt && "不磨皮、不涂抹" in chest.prompt)
+        assertTrue("手、头发、腰腹和背景都不动" in chest.prompt && "不磨皮、不涂抹，也不增加斑点" in chest.prompt)
         val waist = ShapeAI.preset(ShapeItem.AI_WAIST)!!
         assertTrue("手、头发和背景都不动" in waist.prompt && "腰腹和背景都不动" !in waist.prompt)
         val arm = ShapeAI.preset(ShapeItem.AI_ARM)!!

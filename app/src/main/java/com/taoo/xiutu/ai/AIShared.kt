@@ -159,3 +159,22 @@ fun ResultViewer(image: Bitmap, onClose: () -> Unit, source: String = "AI 生成
         }
     }
 }
+
+/** 橙色的主按钮，带 AI 角标。 */
+@Composable
+fun AIMainButton(title: String, modifier: Modifier = Modifier, symbol: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(modifier) {
+        Row(
+            Modifier.fillMaxWidth().height(42.dp).clip(CircleShape)
+                .background(if (enabled) Theme.accent else Theme.accent.copy(alpha = 0.35f)).press(enabled, onClick),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (symbol != null) {
+                Icon(sym(symbol), null, tint = Color.Black, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1)
+        }
+        CornerBadge("AI", Modifier.align(Alignment.TopEnd).offset(x = (-6).dp, y = (-5).dp))
+    }
+}

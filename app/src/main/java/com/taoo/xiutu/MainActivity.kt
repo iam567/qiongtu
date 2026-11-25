@@ -22,7 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.taoo.xiutu.ai.AISettings
-import com.taoo.xiutu.ai.MasterCatalog
+import com.taoo.xiutu.ai.outfit.OutfitCatalog
 import com.taoo.xiutu.batch.BatchStyleScreen
 import com.taoo.xiutu.batch.StyleStore
 import com.taoo.xiutu.core.DraftStore
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
         FavoriteFaceStore.init(applicationContext)
         DraftStore.init(applicationContext)
         GenderSetting.init(applicationContext)
-        MasterCatalog.init(applicationContext)
+        OutfitCatalog.init(applicationContext)
         StyleStore.init(applicationContext)
         setContent { XiuTuTheme { AppNav() } }
     }

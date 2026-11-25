@@ -54,7 +54,7 @@ object AIVariation {
             group == AIPresetGroup.MASTER && recompose && !hasPerson -> "还是同一个地方，画面里不要出现任何人。"
             group == AIPresetGroup.MASTER && recompose -> "人物长相不变，还是同一个地方。"
             group in listOf(
-                AIPresetGroup.FIX, AIPresetGroup.REMOVE, AIPresetGroup.COMPOSE, AIPresetGroup.BODY,
+                AIPresetGroup.FIX, AIPresetGroup.REMOVE, AIPresetGroup.OUTFIT, AIPresetGroup.COMPOSE, AIPresetGroup.BODY,
                 AIPresetGroup.HAIR_STYLE, AIPresetGroup.HAIR_COLOR, AIPresetGroup.HAIR_CARE,
             ) -> "原来的要求全部照旧，人物长相不变。"
             else -> "人物长相和构图不变。"
