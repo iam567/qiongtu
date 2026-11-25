@@ -43,6 +43,7 @@ fun HomeScreen(
     startStudio: () -> Unit,
     startManga: () -> Unit,
     startBatch: () -> Unit,
+    startOutfits: () -> Unit,
     startHistory: () -> Unit,
     startRaw: () -> Unit,
     startFavorite: () -> Unit = {},
@@ -110,6 +111,7 @@ fun HomeScreen(
                 FeatureButton("camera.aperture", "摄影棚", action = startStudio)
                 FeatureButton("book.pages.fill", "漫画人生", action = startManga)
                 FeatureButton("square.stack.3d.down.right.fill", "统一风格", value = "一批照片调成同一种色彩", action = startBatch)
+                FeatureButton("hanger", "批量换衣服", value = "一组照片换上同一身衣服", action = startOutfits)
                 FeatureButton(if (HistoryStore.hasPassword) "lock.fill" else "photo.stack", "历史图库", value = "${HistoryStore.count} 张", action = startHistory)
                 FeatureButton("star.fill", "满意脸型", value = "${FavoriteFaceStore.faces.size} 个", action = startFavorite)
             }

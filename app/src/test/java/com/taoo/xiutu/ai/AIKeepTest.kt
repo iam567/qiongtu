@@ -3,6 +3,8 @@ package com.taoo.xiutu.ai
 import com.taoo.xiutu.ai.outfit.OutfitCatalog
 import com.taoo.xiutu.ai.outfit.OutfitMask
 import com.taoo.xiutu.ai.outfit.OutfitSkirt
+import com.taoo.xiutu.ai.outfit.Wardrobe
+import com.taoo.xiutu.ai.outfit.WardrobeItem
 import com.taoo.xiutu.editor.EditOp
 import com.taoo.xiutu.ml.Mask8
 import com.taoo.xiutu.ml.PersonSegmenter
@@ -11,6 +13,8 @@ import com.taoo.xiutu.tools.adjust.AdjustOp
 import com.taoo.xiutu.tools.adjust.AdjustParams
 import com.taoo.xiutu.tools.adjust.LocalAdjust
 import com.taoo.xiutu.tools.beauty.BeautyParams
+import com.taoo.xiutu.tools.bodytone.BodyToneParams
+import com.taoo.xiutu.tools.color.V3
 import com.taoo.xiutu.tools.crop.CropOp
 import com.taoo.xiutu.tools.crop.CropParams
 import com.taoo.xiutu.tools.filter.LookOp
@@ -195,5 +199,29 @@ class AIKeepTest {
         assertEquals("head tilted left", SmartCrop.text(reply, "faces", "desc"))
         assertEquals("", SmartCrop.text("看不清", "faces", "desc"))
         assertTrue(FaceCheck.DESCRIBE_PROMPT.lines().none { it.startsWith(" ") })
+    }
+
+    /** 匹配脸色拉满时，身体的平均色正好变成脸色（偏暗、偏亮的通道都对）。 */
+    @Test fun bodyMatchesFace() {
+        for ((face, body) in listOf(V3(0.88f, 0.71f, 0.61f) to V3(0.70f, 0.56f, 0.49f), V3(0.6f, 0.5f, 0.45f) to V3(0.7f, 0.48f, 0.5f), V3(0.95f, 0.9f, 0.85f) to V3(0.45f, 0.33f, 0.28f))) {
+            val g = BodyToneParams(faceMean = face, bodyMean = body).gain()
+            val c = body.array()
+            val t = face.array()
+            for (i in 0..2) {
+                // 和着色器同一个式子
+                val out = c[i] * g[i] / (1 + c[i] * maxOf(g[i] - 1, 0f))
+                assertEquals(t[i], out, if (g[i] >= 5f) 0.2f else 0.002f)
+            }
+        }
+    }
+
+    @Test fun wardrobe() {
+        val item = WardrobeItem("a", "衣服 1", 0, desc = "红色长裙", count = 2)
+        val p = Wardrobe.prompt(item, OutfitSkirt.TRAIN)
+        assertTrue(p.startsWith("把第一张图里主要人物的衣服换成参考图里的那一身。") && "这身衣服的样子：红色长裙。必须" in p)
+        assertTrue(OutfitSkirt.TRAIN.prompt + OutfitCatalog.CLEAN + OutfitCatalog.KEEP in p)
+        assertTrue("这身衣服的样子" !in Wardrobe.prompt(item.copy(desc = ""), OutfitSkirt.NORMAL))
+        val b = Wardrobe.bounds(Mask8(ByteArray(160 * 160) { if (it % 160 in 40..79 && it / 160 in 16..143) -1 else 0 }, 160, 160))!!
+        assertEquals(0.25f, b[0], 1e-5f); assertEquals(0.1f, b[1], 1e-5f); assertEquals(0.5f, b[2], 1e-5f); assertEquals(0.9f, b[3], 1e-5f)
     }
 }

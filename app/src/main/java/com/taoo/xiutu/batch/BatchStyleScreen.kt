@@ -41,9 +41,12 @@ import com.taoo.xiutu.ai.AIMainButton
 import com.taoo.xiutu.ai.AISettings
 import com.taoo.xiutu.ai.NeedsKeyView
 import com.taoo.xiutu.ai.ProviderMenu
+import com.taoo.xiutu.ai.outfit.OutfitSkirt
+import com.taoo.xiutu.ai.outfit.WardrobeStore
 import com.taoo.xiutu.core.Img
 import com.taoo.xiutu.picker.PhotoPickerScreen
 import com.taoo.xiutu.settings.SettingsSheet
+import com.taoo.xiutu.ui.Chip
 import com.taoo.xiutu.ui.CornerBadge
 import com.taoo.xiutu.ui.Theme
 import com.taoo.xiutu.ui.Toast
@@ -63,14 +66,19 @@ import kotlin.math.roundToInt
 private val warnRed = Color(1f, 0.45f, 0.4f)
 private val tileShape = RoundedCornerShape(10.dp)
 
-/** 统一风格：选一个存好的风格，导入一批照片，AI 一张张处理，出一张看一张，随时能停。styleID：进来就选这个风格。 */
+/**
+ * 统一风格：选一个存好的风格，导入一批照片，AI 一张张处理，出一张看一张，随时能停。styleID：进来就选这个风格。
+ * outfitMode = 批量换衣服：换成衣橱里的一身，outfitID：进来就选这一身。
+ */
 @Composable
-fun BatchStyleScreen(styleID: String?, onClose: () -> Unit) {
+fun BatchStyleScreen(styleID: String?, outfitMode: Boolean = false, outfitID: String? = null, onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val model = remember {
         BatchStyleModel(context.applicationContext).also { m ->
             StyleStore.styles.firstOrNull { it.id == styleID }?.let { m.style = it }
+            m.outfitMode = outfitMode
+            if (outfitMode) m.outfit = WardrobeStore.items.firstOrNull { it.id == outfitID } ?: WardrobeStore.items.firstOrNull()
         }
     }
     var picking by remember { mutableStateOf(false) }
@@ -104,7 +112,7 @@ fun BatchStyleScreen(styleID: String?, onClose: () -> Unit) {
                     Icon(sym("chevron.left"), "返回", tint = Color.White)
                 }
                 Text(
-                    "统一风格", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                    if (outfitMode) "批量换衣服" else "统一风格", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White,
                     textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
                 )
                 if (model.doneCount > 0) {
@@ -132,13 +140,13 @@ fun BatchStyleScreen(styleID: String?, onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 model.error?.let { Text(it, fontSize = 12.sp, lineHeight = 17.sp, color = warnRed, modifier = Modifier.fillMaxWidth()) }
-                StyleRow(
+                if (outfitMode) ClothesRow(model) else StyleRow(
                     model,
                     onAdd = { stylePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     onRename = { renaming = it },
                 )
                 PhotoRow(model) { picking = true }
-                if (model.doneCount > 0) {
+                if (!outfitMode && model.doneCount > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("强度", fontSize = 13.sp, color = Theme.dim)
                         XSlider(model.strength, { model.changeStrength(it) }, 0f..1f, Modifier.weight(1f), onFinished = { model.finishStrength() })
@@ -165,15 +173,16 @@ fun BatchStyleScreen(styleID: String?, onClose: () -> Unit) {
         }
     }
     if (showSettings) SettingsSheet(onDismiss = { showSettings = false })
-    renaming?.let { style -> RenameDialog(style) { renaming = null } }
+    renaming?.let { style -> NameDialog("风格的名字", style.name, onDismiss = { renaming = null }) { StyleStore.rename(style, it) } }
 }
 
+/** 改名的小窗。 */
 @Composable
-private fun RenameDialog(style: SavedStyle, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf(style.name) }
+internal fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, onDone: (String) -> Unit) {
+    var name by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("风格的名字") },
+        title = { Text(title) },
         text = {
             TextField(
                 name, { name = it }, singleLine = true,
@@ -184,7 +193,7 @@ private fun RenameDialog(style: SavedStyle, onDismiss: () -> Unit) {
                 shape = RoundedCornerShape(12.dp),
             )
         },
-        confirmButton = { TextButton({ StyleStore.rename(style, name); onDismiss() }) { Text("好", color = Color.White) } },
+        confirmButton = { TextButton({ onDone(name); onDismiss() }) { Text("好", color = Color.White) } },
         dismissButton = { TextButton(onDismiss) { Text("取消", color = Color.White) } },
         containerColor = Theme.panel,
     )
@@ -263,6 +272,26 @@ private fun StyleRow(model: BatchStyleModel, onAdd: () -> Unit, onRename: (Saved
                     })
                 }
             }
+        }
+    }
+}
+
+/** 选衣橱里的一身、裙摆。 */
+@Composable
+private fun ClothesRow(model: BatchStyleModel) {
+    Column(Modifier.alpha(if (model.running) 0.4f else 1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (WardrobeStore.items.isEmpty()) {
+            Text("衣橱是空的，先在 AI 修图的换衣服里存一身", fontSize = 13.sp, color = warnRed, modifier = Modifier.fillMaxWidth())
+        } else {
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (item in WardrobeStore.items) key(item.id) {
+                    val image by produceState<Bitmap?>(null, item.id) { value = withContext(Dispatchers.IO) { WardrobeStore.image(item)?.let { Img.thumb(it, 200, 1f) } } }
+                    Tile(item.name, selected = model.outfit?.id == item.id, image = image, onClick = { if (!model.running) model.outfit = item }) {}
+                }
+            }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (k in OutfitSkirt.entries) Chip("裙摆 " + k.title, selected = model.skirt == k) { if (!model.running) model.skirt = k }
         }
     }
 }
@@ -356,9 +385,9 @@ private fun Actions(model: BatchStyleModel, openSettings: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val item = model.current
         if (item != null && (item.status == BatchStyleModel.Status.DONE || item.status == BatchStyleModel.Status.FAILED)) {
-            Box(Modifier.weight(1f).alpha(if (model.style == null) 0.4f else 1f)) {
+            Box(Modifier.weight(1f).alpha(if (model.ready) 1f else 0.4f)) {
                 Box(
-                    Modifier.fillMaxWidth().height(42.dp).clip(CircleShape).background(Theme.chip).press(model.style != null) { model.redo(item.id) },
+                    Modifier.fillMaxWidth().height(42.dp).clip(CircleShape).background(Theme.chip).press(model.ready) { model.redo(item.id) },
                     contentAlignment = Alignment.Center,
                 ) { Text("重做这一张", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
                 CornerBadge("AI", Modifier.align(Alignment.TopEnd).offset(x = (-6).dp, y = (-5).dp))
@@ -367,7 +396,7 @@ private fun Actions(model: BatchStyleModel, openSettings: () -> Unit) {
         if (model.remaining > 0 || model.items.isEmpty()) {
             AIMainButton(
                 if (model.doneCount > 0) "继续处理 ${model.remaining} 张" else "开始处理 ${model.remaining} 张", Modifier.weight(1f),
-                enabled = model.style != null && model.remaining > 0,
+                enabled = model.ready && model.remaining > 0,
             ) { model.start() }
         }
     }

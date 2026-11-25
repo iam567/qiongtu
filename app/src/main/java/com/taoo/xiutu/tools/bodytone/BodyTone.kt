@@ -186,7 +186,7 @@ void main() {
 }
 """
 
-        private const val TONE = Shaders.HEADER + """
+        private const val TONE = Shaders.HEADER + Shaders.COLOR_FUNCS + """
 uniform sampler2D src;
 uniform sampler2D mid;
 uniform sampler2D mask;
@@ -210,7 +210,8 @@ void main() {
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     c += vec3(0.045, 0.006, -0.05) * p.w * l * 2.0 * (1.0 - l * 0.5);
     c += vec3(0.045, -0.018, -0.004) * rosy * l * 2.0 * (1.0 - l * 0.5);
-    o = vec4(mix(s.rgb, clamp(c, 0.0, 1.0), texture(mask, uv).r), s.a);
+    // 贴回去在线性光里混合，和 iOS 一致。
+    o = vec4(linearToSrgb(mix(srgbToLinear(s.rgb), srgbToLinear(clamp(c, 0.0, 1.0)), texture(mask, uv).r)), s.a);
 }
 """
 
@@ -273,17 +274,18 @@ object BodyToneDetector {
     /** 范围里的平均颜色（按蒙版加权）；几乎没选中东西时是 null。 */
     fun mean(image: Bitmap, params: BodyToneParams): V3? = Gpu.run {
         val s = upload(image)
-        val k = 160f / max(image.width, image.height)
-        val w = max(1, (image.width * k).toInt())
-        val h = max(1, (image.height * k).toInt())
-        fun pixels(t: Tex): IntArray {
-            // 缩小之前先模糊，免得漏采样
-            val soft = blur(t, max(t.width, t.height) / 160f)
-            val b = read(pass(Shaders.COPY, mapOf("src" to soft), width = w, height = h))
-            return IntArray(w * h).also { b.getPixels(it, 0, w, 0, 0, w, h) }
+        val mask = params.mask(this, s)
+        // 先按蒙版加权再缩小：旁边的衣服和背景不会混进来。
+        var sum = passFloat(WEIGHTED, mapOf("src" to s, "mask" to mask), width = mask.width, height = mask.height)
+        while (max(sum.width, sum.height) > 160) {
+            // 每次正好对半（双线性取四点平均），不漏采样
+            sum = passFloat(Shaders.COPY, mapOf("src" to sum), width = max(1, (sum.width + 1) / 2), height = max(1, (sum.height + 1) / 2))
         }
-        val a = pixels(s)
-        val m = pixels(params.mask(this, s))
+        val color = read(pass(UNWEIGHT, mapOf("src" to sum), width = sum.width, height = sum.height))
+        val weights = read(pass(WEIGHT, mapOf("src" to sum), width = sum.width, height = sum.height))
+        val n = sum.width * sum.height
+        val a = IntArray(n).also { color.getPixels(it, 0, sum.width, 0, 0, sum.width, sum.height) }
+        val m = IntArray(n).also { weights.getPixels(it, 0, sum.width, 0, 0, sum.width, sum.height) }
         var r = 0.0
         var g = 0.0
         var b = 0.0
@@ -297,6 +299,28 @@ object BodyToneDetector {
         }
         if (weight <= 12) null else V3((r / (weight * 255)).toFloat(), (g / (weight * 255)).toFloat(), (b / (weight * 255)).toFloat())
     }
+
+    private const val WEIGHTED = Shaders.HEADER + """
+uniform sampler2D src;
+uniform sampler2D mask;
+void main() {
+    float m = texture(mask, uv).r;
+    o = vec4(texture(src, uv).rgb * m, m);
+}
+"""
+
+    private const val UNWEIGHT = Shaders.HEADER + """
+uniform sampler2D src;
+void main() {
+    vec4 c = texture(src, uv);
+    o = vec4(clamp(c.rgb / max(c.a, 0.0001), 0.0, 1.0), 1.0);
+}
+"""
+
+    private const val WEIGHT = Shaders.HEADER + """
+uniform sampler2D src;
+void main() { o = vec4(vec3(texture(src, uv).a), 1.0); }
+"""
 
     private fun faceMask(faces: List<FaceInfo>, width: Int, height: Int): Bitmap {
         val k = 900f / max(width, height)

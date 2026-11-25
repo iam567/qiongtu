@@ -427,6 +427,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def look_text(self, prompt):
         """看图的回答：智能构图要 crops，找脸要 faces。"""
+        if "工艺单" in prompt:
+            return "及地长裙，主色酒红，缎面微光；圆领无袖，收腰，裙身两层，腰间一条同色细带。"
         if "faces" in prompt:
             data = {"faces": [{"box": [420, 180, 560, 360]}]}
             if "desc" in prompt:

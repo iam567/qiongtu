@@ -50,6 +50,9 @@ import com.taoo.xiutu.ai.outfit.OutfitCatalog
 import com.taoo.xiutu.ai.outfit.OutfitMask
 import com.taoo.xiutu.ai.outfit.OutfitPanel
 import com.taoo.xiutu.ai.outfit.OutfitSkirt
+import com.taoo.xiutu.ai.outfit.Wardrobe
+import com.taoo.xiutu.ai.outfit.WardrobeItem
+import com.taoo.xiutu.ai.outfit.WardrobeStore
 import com.taoo.xiutu.core.Img
 import com.taoo.xiutu.editor.AIRecipe
 import com.taoo.xiutu.editor.AiToolApi
@@ -129,6 +132,13 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
     var outfitColor by mutableStateOf("")
     var outfitSkirt by mutableStateOf(OutfitSkirt.NORMAL)
     var outfitReference by mutableStateOf<Bitmap?>(null)
+    /** 衣橱：选了哪一身、正在存、刚存好的名字；batchOutfit = 正在批量换的那一身。 */
+    var wardrobePick by mutableStateOf<WardrobeItem?>(null)
+        private set
+    var wardrobeSaving by mutableStateOf(false)
+        private set
+    private var wardrobeSaved by mutableStateOf<String?>(null)
+    var batchOutfit by mutableStateOf<String?>(null)
     private var outfitPatch by mutableStateOf(false)
     /** 这条指令只该动身体的哪一块。 */
     private var part: BodyPart? = null
@@ -177,7 +187,8 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
 
     private val hasRegion get() = strokes.any { !it.erase }
 
-    override val drawing: Boolean get() = true
+    /** 挑衣服时不涂抹（那里没有撤销涂抹的按钮，误划一笔就变成只改那一块了）；补换时才涂。 */
+    override val drawing: Boolean get() = group != AIPresetGroup.OUTFIT || outfitPatch
     override val busy: Boolean get() = running
     override val liftedColor: List<EditOp> get() = if (hasResult) colorLift else emptyList()
 
@@ -222,6 +233,59 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         outfitPick = outfit
         if (outfit != null && outfitColor !in outfit.colors) outfitColor = outfit.colors.firstOrNull() ?: ""
         if (outfit?.skirt != true) outfitSkirt = OutfitSkirt.NORMAL
+    }
+
+    fun pickWardrobe(item: WardrobeItem?) {
+        error = null
+        wardrobePick = item
+        outfitSkirt = OutfitSkirt.NORMAL
+    }
+
+    /** 把现在这张照片里穿的衣服存进衣橱。into 不为空 = 给那一身补一个角度。 */
+    fun saveToWardrobe(into: String? = null) {
+        val proxy = model.proxy ?: return
+        if (wardrobeSaving) return
+        wardrobeSaving = true
+        error = null
+        // 刚换好还没应用的也算。
+        val edit = currentEdit()
+        val ops = if (edit == null) model.photoOps
+        else if (colorLift.isEmpty()) model.photoOps + edit
+        else EditOp.splitColor(model.photoOps).first + edit + colorLift
+        model.scope.launch {
+            try {
+                val images = withContext(Dispatchers.Default) {
+                    runCatching { Wardrobe.cutouts(Img.downscale(EditOp.applyAll(ops, proxy), 4096)) }
+                        .onFailure { it.printStackTrace() }.getOrDefault(emptyList())
+                }
+                if (images.isEmpty()) {
+                    error = "没有认出人，存不了衣服。"
+                    return@launch
+                }
+                if (into != null) {
+                    if (!WardrobeStore.addAngle(into, images[0])) error = "这身衣服已经有三张图了。"
+                    return@launch
+                }
+                val item = WardrobeStore.add(images)
+                if (item == null) {
+                    error = "没有存成功。"
+                    return@launch
+                }
+                wardrobeSaved = item.name
+                // 让能看图的 AI 写一份款式说明；写不了也能用，只是少一份说明。
+                val endpoint = AISettings.endpoint() ?: return@launch
+                val text = try {
+                    AIClient.look(endpoint, Wardrobe.DESCRIBE_PROMPT, images[0])
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    return@launch
+                }
+                WardrobeStore.update(item.id, desc = text.trim().take(900))
+            } finally {
+                wardrobeSaving = false
+            }
+        }
     }
 
     fun runOutfit(prompt: String, title: String) {
@@ -383,6 +447,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         area = null
         core = null
         resultOutfit = false
+        wardrobeSaved = null
         shift = 0f to 0f
         colorLift = emptyList()
         colorBase = null
@@ -462,8 +527,8 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
             val text = if (p.contains(OutfitCatalog.KEEP)) p else p + "。" + OutfitCatalog.CLEAN + OutfitCatalog.KEEP
             // 点款式的看选的裙摆；自己写的看说没说裙摆要溢出去。
             val overflow = if (presetTitle.isEmpty()) OutfitCatalog.saysOverflow(basePrompt)
-            else outfitSkirt == OutfitSkirt.OVERFLOW && outfitPick != null
-            val references = if (group == AIPresetGroup.OUTFIT) listOfNotNull(outfitReference) else emptyList()
+            else outfitSkirt == OutfitSkirt.OVERFLOW && (outfitPick != null || wardrobePick != null)
+            val worn = wardrobePick
             frame = null
             toneOnly = false
             error = null
@@ -472,6 +537,11 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
             val gen = ++generation
             job = model.scope.launch {
                 val crop = if (overflow) null else withContext(Dispatchers.Default) { runCatching { OutfitMask.crop(composeBase) }.getOrNull() }
+                val references = when {
+                    group != AIPresetGroup.OUTFIT -> emptyList()
+                    worn != null -> withContext(Dispatchers.IO) { WardrobeStore.references(worn) }
+                    else -> listOfNotNull(outfitReference)
+                }
                 if (closed || gen != generation) return@launch
                 running = false
                 launchAI(text, emptyList(), crop, guidance = false, references = references, outfit = true, overflow = overflow)
@@ -1042,6 +1112,10 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                     "${(soften * 100).roundToInt()}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
                     textAlign = TextAlign.End, modifier = Modifier.width(34.dp),
                 )
+            }
+            if (resultOutfit) {
+                val label = if (wardrobeSaving) "正在存…" else wardrobeSaved?.let { "已存进衣橱：$it" } ?: "存进我的衣橱"
+                WideButton(label, "hanger", "AI", Modifier.fillMaxWidth()) { if (!wardrobeSaving && wardrobeSaved == null) saveToWardrobe() }
             }
             if (resultOutfit || (group == AIPresetGroup.OUTFIT && outfitPatch)) {
                 WideButton("有地方没换干净，涂抹补换", "paintbrush", null, Modifier.fillMaxWidth()) { startOutfitPatch() }

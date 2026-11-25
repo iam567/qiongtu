@@ -14,6 +14,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.exifinterface.media.ExifInterface
 import com.taoo.xiutu.ai.AIClient
+import com.taoo.xiutu.ai.AIEdit
+import com.taoo.xiutu.ai.ChangeKeep
+import com.taoo.xiutu.ai.FaceKeep
+import com.taoo.xiutu.ai.outfit.OutfitMask
+import com.taoo.xiutu.ai.outfit.OutfitSkirt
+import com.taoo.xiutu.ai.outfit.Wardrobe
+import com.taoo.xiutu.ai.outfit.WardrobeItem
+import com.taoo.xiutu.ai.outfit.WardrobeStore
+import com.taoo.xiutu.ml.PersonSegmenter
 import com.taoo.xiutu.ai.AIEndpoint
 import com.taoo.xiutu.ai.AIError
 import com.taoo.xiutu.ai.AIRunner
@@ -29,10 +38,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
+import java.util.UUID
 
 /** 统一风格：一批照片全部参考同一张存好的风格图，AI 一张张给出色彩，套回各自的原图。 */
 class BatchStyleModel(private val context: Context) {
@@ -46,13 +57,23 @@ class BatchStyleModel(private val context: Context) {
         val result: Bitmap? = null,
         /** AI 的色彩换算成的颜色对照表。 */
         val cube: FloatArray? = null,
+        /** 换衣服：出好的成品（原图分辨率）。 */
+        val output: File? = null,
         val status: Status = Status.PENDING,
         val error: String? = null,
-    )
+    ) {
+        val finished get() = cube != null || output != null
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     var style by mutableStateOf(StyleStore.styles.firstOrNull())
+    /** 批量换衣服（true）还是统一风格。 */
+    var outfitMode = false
+    var outfit by mutableStateOf<WardrobeItem?>(null)
+    var skirt by mutableStateOf(OutfitSkirt.NORMAL)
+    /** 风格 / 衣服选好了。 */
+    val ready get() = if (outfitMode) outfit != null else style != null
     var items by mutableStateOf<List<Item>>(emptyList())
         private set
     var selected by mutableIntStateOf(-1)
@@ -122,6 +143,10 @@ class BatchStyleModel(private val context: Context) {
 
     private fun run(ids: List<Int>) {
         if (running || ids.isEmpty()) return
+        if (outfitMode) {
+            runOutfits(ids)
+            return
+        }
         val picked = style ?: run {
             error = "先选一个风格"
             return
@@ -142,36 +167,102 @@ class BatchStyleModel(private val context: Context) {
                 running = false
                 return@launch
             }
-            var failures = 0
-            for (id in ids) {
-                val item = items.firstOrNull { it.id == id } ?: break
-                update(id) { it.copy(status = Status.RUNNING) }
-                started = System.currentTimeMillis()
-                try {
-                    val cube = process(item.uri, reference, endpoint)
-                    AIClient.takeLastUsage()?.cost?.let { spent += it }
-                    update(id) { it.copy(cube = cube, status = Status.DONE) }
-                    failures = 0
-                    renderPreview(id)
-                    selected = id
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    val message = (e as? AIError)?.text ?: e.message ?: "请求失败。"
-                    update(id) { it.copy(status = Status.FAILED, error = message) }
-                    error = "${item.name}：$message"
-                    failures++
-                    // 连着两张都失败，多半是 Key、余额或网络的问题，先停下。
-                    if (failures >= 2) break
-                }
+            each(ids) { item ->
+                val cube = process(item.uri, reference, endpoint)
+                AIClient.takeLastUsage()?.cost?.let { spent += it }
+                update(item.id) { it.copy(cube = cube, status = Status.DONE) }
+                renderPreview(item.id)
             }
-            settle()
+        }
+    }
+
+    /** 一张张做；连着两张失败就停。 */
+    private suspend fun each(ids: List<Int>, work: suspend (Item) -> Unit) {
+        var failures = 0
+        for (id in ids) {
+            val item = items.firstOrNull { it.id == id } ?: break
+            update(id) { it.copy(status = Status.RUNNING) }
+            started = System.currentTimeMillis()
+            try {
+                work(item)
+                failures = 0
+                selected = id
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                val message = (e as? AIError)?.text ?: e.message ?: "请求失败。"
+                update(id) { it.copy(status = Status.FAILED, error = message) }
+                error = "${item.name}：$message"
+                failures++
+                // 连着两张都失败，多半是 Key、余额或网络的问题，先停下。
+                if (failures >= 2) break
+            }
+        }
+        settle()
+    }
+
+    // MARK: 换衣服
+
+    private fun runOutfits(ids: List<Int>) {
+        val item = outfit?.let { WardrobeStore.find(it.id) } ?: run {
+            error = "先选一身衣服"
+            return
+        }
+        val endpoint = AISettings.endpoint() ?: run {
+            error = "还没有设置 ${AISettings.active.shortTitle} 的 API Key。"
+            return
+        }
+        val prompt = Wardrobe.prompt(item, skirt)
+        val overflow = skirt == OutfitSkirt.OVERFLOW
+        error = null
+        running = true
+        items = items.map { if (it.id in ids) it.copy(status = Status.PENDING, error = null) else it }
+        job = scope.launch {
+            val references = withContext(Dispatchers.IO) { WardrobeStore.references(item) }
+            each(ids) { photo ->
+                val output = dress(photo.uri, references, prompt, overflow, endpoint)
+                AIClient.takeLastUsage()?.cost?.let { spent += it }
+                val shown = withContext(Dispatchers.IO) { Img.decode(output, PREVIEW_SIDE) }
+                items.firstOrNull { it.id == photo.id }?.output?.delete()
+                update(photo.id) { it.copy(output = output, result = shown, status = Status.DONE) }
+            }
+        }
+    }
+
+    /** 给一张照片换上这身衣服，成品按原图分辨率写成临时文件。背景、脸、头用原图（和单张换衣服一样的做法）。 */
+    private suspend fun dress(uri: Uri, references: List<Bitmap>, prompt: String, overflow: Boolean, endpoint: AIEndpoint): File {
+        val full = withContext(Dispatchers.IO) { Img.decode(context, uri)?.let { Img.downscale(it, Gpu.run { Gpu.maxTextureSize }) } }
+            ?: throw AIError("这张照片打不开。")
+        val proxy = withContext(Dispatchers.Default) { Img.downscale(full, 5120) }
+        val big = withContext(Dispatchers.Default) { Img.downscale(proxy, 3072) }
+        val crop = withContext(Dispatchers.Default) {
+            if (PersonSegmenter.maskData(Img.downscale(big, 1024)) == null) throw AIError("没有认出人。")
+            if (overflow) null else OutfitMask.crop(big)
+        }
+        AIClient.takeLastUsage()
+        val piece = AIRunner.run(endpoint, prompt, proxy, emptyList(), emptyList(), crop, appendGuidance = false, references = references)
+        return withContext(Dispatchers.Default) {
+            val image = if (crop != null) OutfitMask.paste(piece, crop, proxy) else piece
+            ensureActive()
+            val shift = ChangeKeep.shift(big, image)
+            val faces = FaceKeep.match(big, image).map { it.moved(shift.first, shift.second, image.width, image.height) }
+            val still = faces.isNotEmpty() && faces.all { it.isStill }
+            val masks = OutfitMask.masks(big, image, overflow, keepHead = still)
+            val edit = AIEdit(
+                image, emptyList(), faces = if (still) emptyList() else faces, changedOnly = true,
+                area = masks.area?.toGrayBitmap(), core = masks.core?.toGrayBitmap(), shift = shift,
+            )
+            val out = edit.apply(full)
+            ensureActive()
+            val data = withExif(Img.jpeg(out, 95), uri, out.width, out.height)
+            val dir = File(context.cacheDir, "outfit-batch").apply { mkdirs() }
+            File(dir, UUID.randomUUID().toString() + ".jpg").also { it.writeBytes(data) }
         }
     }
 
     /** 没做完的那张恢复成"还没做"；原来做好过的还算做好的。 */
     private fun settle() {
-        items = items.map { if (it.status == Status.RUNNING) it.copy(status = if (it.cube == null) Status.PENDING else Status.DONE) else it }
+        items = items.map { if (it.status == Status.RUNNING) it.copy(status = if (it.finished) Status.DONE else Status.PENDING) else it }
         running = false
     }
 
@@ -183,6 +274,8 @@ class BatchStyleModel(private val context: Context) {
 
     fun dispose() {
         scope.cancel()
+        // 没存的成品不留
+        for (item in items) item.output?.delete()
     }
 
     private suspend fun process(uri: Uri, reference: Bitmap, endpoint: AIEndpoint): FloatArray {
@@ -225,12 +318,11 @@ class BatchStyleModel(private val context: Context) {
         exported = 0
         val k = strength
         for (item in items.filter { it.status == Status.DONE }) {
-            val cube = item.cube ?: continue
             val ok = withContext(Dispatchers.Default) {
                 runCatching {
-                    val data = render(item.uri, cube, k) ?: return@runCatching false
+                    val data = item.output?.readBytes() ?: item.cube?.let { render(item.uri, it, k) } ?: return@runCatching false
                     Saver.saveToGallery(context, data, SaveOptions.Format.JPEG)
-                    if (HistoryStore.enabled) HistoryStore.add(context, data, "jpg", "统一风格")
+                    if (HistoryStore.enabled) HistoryStore.add(context, data, "jpg", if (outfitMode) "批量换衣服" else "统一风格")
                     true
                 }.onFailure { it.printStackTrace() }.getOrDefault(false)
             }
