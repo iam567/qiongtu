@@ -199,34 +199,53 @@ enum class ShapeGroup(val title: String) {
     val items: List<ShapeItem> get() = ShapeItem.entries.filter { it.group == this }
 }
 
-/** 塑形里的各项。带 AI 的那几项本机做不好（要改姿态、要凭空画出肌肉线条），交给 AI。 */
+/** 塑形里的各项。本机能调的项都另有一个 AI 版（认不出人体时也能用）；还有几项本机做不好，只有 AI 版。 */
 enum class ShapeItem(val title: String, val symbol: String, val group: ShapeGroup, val isAI: Boolean = false) {
     WAIST("瘦腰", "arrow.right.and.line.vertical.and.arrow.left", ShapeGroup.SLIM),
     SLIM_ALL("瘦全身", "figure.stand", ShapeGroup.SLIM),
+    AI_WAIST("瘦腰", "arrow.right.and.line.vertical.and.arrow.left", ShapeGroup.SLIM, true),
+    AI_SLIM_ALL("瘦全身", "figure.stand", ShapeGroup.SLIM, true),
     AI_BELLY("收腹", "circle.bottomhalf.filled", ShapeGroup.SLIM, true),
     AI_TUMMY("瘦肚子", "circle.bottomhalf.filled", ShapeGroup.SLIM, true),
     ARM("瘦手臂", "figure.arms.open", ShapeGroup.ARM),
     UPPER_ARM("瘦大臂", "figure.arms.open", ShapeGroup.ARM),
     FORE_ARM("瘦小臂", "figure.arms.open", ShapeGroup.ARM),
+    AI_ARM("瘦手臂", "figure.arms.open", ShapeGroup.ARM, true),
+    AI_UPPER_ARM("瘦大臂", "figure.arms.open", ShapeGroup.ARM, true),
+    AI_FORE_ARM("瘦小臂", "figure.arms.open", ShapeGroup.ARM, true),
     LEG("瘦腿", "figure.walk", ShapeGroup.LEG),
     THIGH("瘦大腿", "figure.walk", ShapeGroup.LEG),
     CALF("瘦小腿", "figure.walk", ShapeGroup.LEG),
+    AI_LEG("瘦腿", "figure.walk", ShapeGroup.LEG, true),
+    AI_THIGH("瘦大腿", "figure.walk", ShapeGroup.LEG, true),
+    AI_CALF("瘦小腿", "figure.walk", ShapeGroup.LEG, true),
     AI_STRAIGHT_LEG("直腿", "figure.walk", ShapeGroup.LEG, true),
+    SHOULDER_LEVEL("高低肩", "level", ShapeGroup.POSTURE),
+    AI_SHOULDER_LEVEL("高低肩", "level", ShapeGroup.POSTURE, true),
     AI_STRAIGHT_BACK("直背", "figure.stand.line.dotted.figure.stand", ShapeGroup.POSTURE, true),
     AI_NECK_FORWARD("脖子前倾", "figure.stand.line.dotted.figure.stand", ShapeGroup.POSTURE, true),
-    SHOULDER_LEVEL("高低肩", "level", ShapeGroup.POSTURE),
     SWAN_NECK("天鹅颈", "person.bust", ShapeGroup.NECK),
     SHOULDER_WIDTH("肩宽", "arrow.left.and.right", ShapeGroup.NECK),
     SQUARE_SHOULDER("直角肩", "rectangle.tophalf.inset.filled", ShapeGroup.NECK),
-    AI_TRAPEZIUS("瘦斜方肌", "rectangle.tophalf.inset.filled", ShapeGroup.NECK, true),
     NECK_WIDTH("脖子粗细", "person.bust", ShapeGroup.NECK),
     NECK_LENGTH("脖子长短", "person.bust", ShapeGroup.NECK),
+    AI_SWAN_NECK("天鹅颈", "person.bust", ShapeGroup.NECK, true),
+    AI_WIDE_SHOULDER("宽肩", "arrow.left.and.right", ShapeGroup.NECK, true),
+    AI_NARROW_SHOULDER("窄肩", "arrow.left.and.right", ShapeGroup.NECK, true),
+    AI_SQUARE_SHOULDER("直角肩", "rectangle.tophalf.inset.filled", ShapeGroup.NECK, true),
+    AI_THIN_NECK("细脖子", "person.bust", ShapeGroup.NECK, true),
+    AI_LONG_NECK("长脖子", "person.bust", ShapeGroup.NECK, true),
+    AI_TRAPEZIUS("瘦斜方肌", "rectangle.tophalf.inset.filled", ShapeGroup.NECK, true),
     SMALL_HEAD("小头", "person.crop.circle", ShapeGroup.HEAD),
+    AI_SMALL_HEAD("小头", "person.crop.circle", ShapeGroup.HEAD, true),
     CHEST("丰胸", "heart", ShapeGroup.CHEST),
+    AI_CHEST("丰胸", "heart", ShapeGroup.CHEST, true),
     AI_CHEST_NATURAL("自然胸型", "heart", ShapeGroup.CHEST, true),
     AI_CHEST_LIFT("胸位提升", "heart", ShapeGroup.CHEST, true),
     HIPS("美胯", "oval.portrait", ShapeGroup.HIP),
     WAIST_HIP("腰臀比", "arrow.right.and.line.vertical.and.arrow.left", ShapeGroup.HIP),
+    AI_HIPS("美胯", "oval.portrait", ShapeGroup.HIP, true),
+    AI_WAIST_HIP("腰臀比", "arrow.right.and.line.vertical.and.arrow.left", ShapeGroup.HIP, true),
     AI_FULL_HIP("丰臀", "oval.portrait", ShapeGroup.HIP, true),
     AI_LIFT_HIP("提臀", "oval.portrait", ShapeGroup.HIP, true);
 
@@ -335,6 +354,25 @@ object ShapeAI {
 
     fun preset(item: ShapeItem): AIPreset? {
         val prompt = when (item) {
+            ShapeItem.AI_WAIST -> "让腰部明显变细一些，腰线收紧，左右对称，上身和胯部的比例自然。"
+            ShapeItem.AI_SLIM_ALL -> "让全身整体瘦一圈：脸以外的躯干、腰、手臂、腿都按比例变细，自然协调，不要夸张。"
+            ShapeItem.AI_ARM -> "让两只手臂（大臂和小臂）变细一些，去掉松弛的赘肉，线条紧致，手的大小和位置不变。"
+            ShapeItem.AI_UPPER_ARM -> "让大臂（肩膀到手肘）变细一些，去掉松弛的赘肉，小臂和手不变。"
+            ShapeItem.AI_FORE_ARM -> "让小臂（手肘到手腕）变细一些，线条流畅，大臂和手不变。"
+            ShapeItem.AI_LEG -> "让双腿（大腿和小腿）变细一些，线条流畅修长，腿的长度和位置、脚不变。"
+            ShapeItem.AI_THIGH -> "让大腿变细一些，去掉内侧和外侧的赘肉，小腿和腿的长度不变。"
+            ShapeItem.AI_CALF -> "让小腿变细一些，小腿肚的肌肉块更柔和，大腿和脚不变。"
+            ShapeItem.AI_SHOULDER_LEVEL -> "改善高低肩：让左右两边肩膀一样高，肩线水平，头和手臂的姿势基本不变。"
+            ShapeItem.AI_SWAN_NECK -> "让脖子更修长纤细，肩颈线条舒展优美，头的大小不变，保持自然。"
+            ShapeItem.AI_WIDE_SHOULDER -> "让肩膀稍微宽一些，左右对称，头和手臂的大小不变，保持自然。"
+            ShapeItem.AI_NARROW_SHOULDER -> "让肩膀稍微窄一些，左右对称，头和手臂的大小不变，保持自然。"
+            ShapeItem.AI_SQUARE_SHOULDER -> "把溜肩改成平直利落的直角肩，肩头轮廓清楚，保持自然。"
+            ShapeItem.AI_THIN_NECK -> "让脖子变细一些，颈部线条干净，头和肩膀的大小不变。"
+            ShapeItem.AI_LONG_NECK -> "让脖子稍微长一些，头的大小不变，比例自然。"
+            ShapeItem.AI_SMALL_HEAD -> "让头部（包括头发）整体按比例缩小一点，头身比更好，五官和脸型不变，脖子和肩膀衔接自然，头周围露出来的背景补自然。"
+            ShapeItem.AI_CHEST -> "让胸部比现在明显丰满一些，左右对称，衣服被自然撑起、褶皱合理，领口的位置和露出的范围不变，不要夸张。"
+            ShapeItem.AI_HIPS -> "让胯部两侧的线条更圆润流畅，填平胯部凹陷，腰到大腿过渡自然。"
+            ShapeItem.AI_WAIST_HIP -> "改善腰臀比：腰细一些、臀胯稍宽一些，曲线自然，不要夸张。"
             ShapeItem.AI_BELLY -> "把腹部收平一些，腰腹线条紧致自然，衣服的褶皱保持合理。"
             ShapeItem.AI_TUMMY -> "让肚子小一圈，去掉小肚腩，腰线更明显，保持自然。"
             ShapeItem.AI_STRAIGHT_LEG -> "把腿型调直，改善 O 型腿或 X 型腿，让双腿线条笔直修长，腿的长度和位置不变。"
@@ -347,11 +385,19 @@ object ShapeAI {
             ShapeItem.AI_LIFT_HIP -> "把臀线提高一些，臀部更上翘紧致，保持自然。"
             else -> return null
         }
-        return AIPreset(title = item.title, symbol = item.symbol, prompt = prompt + KEEP)
+        // 体态类本来就要改姿势，不能再说"姿势不变"。
+        val tail = if (item.group == ShapeGroup.POSTURE) {
+            "人物长相、发型、服装的款式和颜色、背景都不变；除了上面说的体态，其余姿势不变。结果仍然是一张真实的照片。"
+        } else KEEP
+        return AIPreset(title = item.title, symbol = item.symbol, prompt = prompt + tail)
     }
 
     /** 一键美体里的 AI 预设。 */
     val looks: List<AIPreset> = listOf(
+        AIPreset(title = "自然", symbol = "figure.stand",
+            prompt = "让身材比例稍微更好一些：腰、手臂、腿略微变细，脖子略修长，改动很轻、看不出修过。$KEEP"),
+        AIPreset(title = "超模", symbol = "figure.walk",
+            prompt = "让身材接近超模比例：头身比更好，腰和四肢更细，双腿和脖子更修长，肩线平直，仍然真实自然。$KEEP"),
         AIPreset(title = "纤细", symbol = "figure.stand",
             prompt = "让全身更纤细苗条一些：腰、手臂、腿都适度变细，比例自然协调，不要夸张。$KEEP"),
         AIPreset(title = "紧致", symbol = "figure.cooldown",

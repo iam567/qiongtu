@@ -285,7 +285,7 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
                     }
                 }
             } else if (mode == ShapeMode.PRESET || mode == ShapeMode.SHAPE) {
-                error = "没有识别到人体。可以改用增高、瘦身、缩放这几种手动的方式。"
+                error = "没有识别到人体。可以用带 AI 的，或者改用增高、瘦身、缩放。"
             }
             render()
         }
@@ -730,7 +730,9 @@ class ShapeSession(model: EditorModel) : ToolSession(model, Tool.SHAPE), ModeSel
             }
             key(group) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (si in group.items) {
+                    // 认不出人体、本机的项用不了时，AI 的排在前面。
+                    val tiles = if (detected && body == null) group.items.sortedBy { !it.isAI } else group.items
+                    for (si in tiles) {
                         val b = body
                         val usable = si.isAI || (b != null && si.available(b))
                         IconTile(
