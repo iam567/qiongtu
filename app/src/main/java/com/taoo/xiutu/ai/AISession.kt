@@ -980,7 +980,11 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
                 }
                 else -> {
                     Box(Modifier.weight(1f)) {
-                        SegmentBar(AIPresetGroup.editGroups, group, { it.title }, { it.symbol }, scrolls = true) { group = it }
+                        SegmentBar(AIPresetGroup.editGroups, group, { it.title }, { it.symbol }, scrolls = true) {
+                            group = it
+                            // 在别的分组里涂过的，不带进换衣服。
+                            if (!drawing && strokes.isNotEmpty()) clearRegion()
+                        }
                     }
                     ProviderMenu(::openSettings, iconOnly = true)
                 }
@@ -1071,7 +1075,7 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             BrushRow()
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BackPill("返回") { outfitPatch = false }
+                BackPill("返回") { clearRegion(); outfitPatch = false }
                 AIMainButton("补换涂抹的地方", Modifier.weight(1f).alpha(if (strokeCount > 0) 1f else 0.4f)) { runOutfitPatch() }
             }
         }
