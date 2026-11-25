@@ -38,6 +38,7 @@ enum MainTab: String, CaseIterable, Identifiable {
             return [
                 MenuEntry(tool: .crop), MenuEntry(tool: .filter), MenuEntry(tool: .adjust),
                 MenuEntry(title: "消除", symbol: "eraser", badge: "AI", action: .erase),
+                MenuEntry(tool: .retouch),
                 MenuEntry(tool: .collage), MenuEntry(tool: .layers),
             ]
         case .beauty:
@@ -236,6 +237,10 @@ struct EditorView: View {
                             model.runOutfit(prompt: OutfitCatalog.prompt(o, color: model.outfitColor, skirt: model.outfitSkirt), title: o.title)
                         }
                     }
+                    if group == .hairStyle, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil,
+                       let preset = group.presets.first(where: { $0.title == "短发" }) {
+                        model.startAIPreset(preset, group: group)
+                    }
                     if let m = ProcessInfo.processInfo.environment["XIUTU_MASTER"], let preset = AIPresetGroup.master.presets.first(where: { $0.title == m }) {
                         model.startMaster(preset)
                     }
@@ -258,6 +263,11 @@ struct EditorView: View {
                     model.open(.layers) { model.addBlankLayer() }
                 } else if let tool = Tool(rawValue: name) {
                     start(tool)
+                    if tool == .retouch, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil {
+                        model.retouchStrokeBegan(at: CGPoint(x: 0.5, y: 0.47), displayScale: 400)
+                        model.retouchStrokeMoved(to: CGPoint(x: 0.52, y: 0.52))
+                        model.retouchStrokeEnded()
+                    }
                     if tool == .smartCrop, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil { model.runSmartCrop() }
                     if tool == .beauty, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { model.runFaceAI(BeautyStyle.all[0]) }
@@ -449,6 +459,16 @@ struct EditorView: View {
             .overlay(alignment: .bottomTrailing) { compareButton }
         case .some(.shape):
             ShapeCanvas(model: model)
+        case .some(.retouch):
+            ZoomableCanvas(image: model.shownImage, handlers: model.retouchWantsStrokes ? DrawHandlers(
+                began: { point, scale in model.retouchStrokeBegan(at: point, displayScale: scale) },
+                moved: { point in model.retouchStrokeMoved(to: point) },
+                ended: { model.retouchStrokeEnded() },
+                cancelled: { model.retouchStrokeCancelled() }
+            ) : nil, detail: model.comparing ? nil : model.detailImage, detailRect: model.detailRect,
+               onViewport: { rect, pixels in model.setViewport(rect, pixels: pixels) },
+               onTap: { point in model.retouchTapped(at: point) })
+            .overlay(alignment: .bottomTrailing) { compareButton }
         case .some(.smartCrop):
             SmartCropCanvas(model: model)
         case .some(.bodyTone):
@@ -595,6 +615,7 @@ struct EditorView: View {
         case .skin: SkinPanel(model: model)
         case .shape: ShapePanel(model: model)
         case .bodyTone: BodyTonePanel(model: model)
+        case .retouch: RetouchPanel(model: model)
         case .smartCrop: SmartCropPanel(model: model, openSettings: { showSettings = true })
         case .effect: EffectPanel(model: model)
         }

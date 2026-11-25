@@ -121,7 +121,9 @@ struct AIPanel: View {
     /// 点一个功能就直接开始。需要补充内容的（比如"换背景"）先弹出输入框，写完自动开始。
     @ViewBuilder
     private var compose: some View {
-        if model.aiGroup == .outfit {
+        if model.aiHandFix, model.aiGroup == .fix {
+            handPanel
+        } else if model.aiGroup == .outfit {
             if model.outfitPatch {
                 patch
             } else {
@@ -129,6 +131,32 @@ struct AIPanel: View {
             }
         } else {
             tiles
+        }
+    }
+
+    /// AI 修手：涂住手，再点开始。
+    private var handPanel: some View {
+        VStack(spacing: 12) {
+            brushRow
+            HStack(spacing: 10) {
+            Button { model.aiHandFix = false } label: {
+                Label("返回", systemImage: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 104, height: 42)
+                    .background(Theme.chip, in: Theme.buttonShape)
+            }
+            .buttonStyle(.plain)
+            Button { model.runAIHand() } label: {
+                Text("修涂抹的手")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 42)
+                    .background(model.aiStrokes.isEmpty ? Theme.accent.opacity(0.35) : Theme.accent, in: Theme.buttonShape)
+                    .overlay(alignment: .topTrailing) { CornerBadge(text: "AI").offset(x: -6, y: -5) }
+            }
+            .buttonStyle(.plain)
+            }
         }
     }
 
@@ -212,7 +240,9 @@ struct AIPanel: View {
                             ImageTile(title: preset.title, image: Self.hairThumb(preset.title),
                                       symbol: preset.symbol, badge: "AI") { start(preset) }
                         } else {
-                            FeatureTile(symbol: preset.symbol, title: preset.title, badge: "AI") { start(preset) }
+                            FeatureTile(symbol: preset.symbol, title: preset.title, badge: "AI") {
+                                if preset.title == "修手" { model.aiHandFix = true } else { start(preset) }
+                            }
                         }
                     }
                     if pictures {
@@ -324,7 +354,7 @@ struct AIPanel: View {
             }
             if model.aiCanKeepRest, !model.aiToneOnly {
                 HStack(spacing: 8) {
-                    Chip(title: model.aiResultOutfit ? "只换衣服" : "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
+                    Chip(title: model.aiResultHair ? "只换头发" : model.aiResultOutfit ? "只换衣服" : "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
                     Chip(title: "完整采用 AI 图", selected: !model.aiChangedOnly) { model.setAIChangedOnly(false) }
                     Spacer()
                 }

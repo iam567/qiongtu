@@ -293,6 +293,7 @@ enum EditOp {
     case instant(InstantParams)
     case effect(EffectParams)
     case bodyTone(BodyToneParams)
+    case retouch(RetouchParams)
 
     func apply(to image: CIImage) -> CIImage {
         switch self {
@@ -335,6 +336,8 @@ enum EditOp {
         case .effect(let params):
             return params.apply(to: image)
         case .bodyTone(let params):
+            return params.apply(to: image)
+        case .retouch(let params):
             return params.apply(to: image)
         }
     }

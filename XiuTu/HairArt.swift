@@ -379,7 +379,7 @@ enum HairArt {
         }
     }
 
-    // MARK: 25 个发型
+    // MARK: 55 个发型
 
     /// 刘海 / 分缝这一组共用的中长发。
     private static func medium(_ s: inout Scene, fringe: Fringe, peak: CGFloat = 0) {
@@ -571,6 +571,201 @@ enum HairArt {
             s.front.append(Piece(fill: CGMutablePath(), dark: [line]))
         },
         "侧分": { s in medium(&s, fringe: .side(cx - 13), peak: 5) },
+        // 下面 30 个
+        "层次长发": { s in
+            s.back = [sheet(to: 152, spread: 2)]
+            s.front = [cap(lift: 7.5, fringe: .curtain)] + locks(to: 150, spread: 3, inner: 17, end: .taper, strands: 2)
+                + locks(to: 112, spread: 4, bulge: 4, inner: 22, end: .taper, strands: 1)
+        },
+        "韩系大卷": { s in
+            s.back = [sheet(to: 156, spread: 6, amp: 4, period: 36)]
+            s.front = [cap(lift: 9, side: 5, puff: 4, fringe: .curtain)]
+                + locks(to: 158, spread: 7, bulge: 4, amp: 5.5, period: 36, inner: 15, strands: 3)
+        },
+        "木马卷": { s in
+            s.back = [sheet(to: 150, spread: 3)]
+            s.front = [cap(lift: 7, fringe: .air(63))]
+            for x in [-27, -19, 19, 27] as [CGFloat] {
+                var y: CGFloat = 74
+                while y < 152 {
+                    s.front.append(curl(pt(cx + x, y), 6.4, turn: x > 0 ? 1 : 4))
+                    y += 8
+                }
+            }
+        },
+        "蛋卷头": { s in
+            s.back = [sheet(to: 148, spread: 7, amp: 2.6, period: 8, grow: 0.2)]
+            s.front = [cap(lift: 9, side: 6, puff: 5, fringe: .part(46))]
+                + locks(to: 150, spread: 8, bulge: 4, amp: 2.8, period: 8, grow: 0.1, inner: 15, strands: 3)
+        },
+        "螺旋卷": { s in
+            s.back = [sheet(to: 148, spread: 3)]
+            s.front = [cap(lift: 7, peak: 3, fringe: .side(cx - 9))]
+            for x in [-30, -22, 22, 30] as [CGFloat] {
+                s.front.append(tube((0...8).map { pt(cx + x + ($0 % 2 == 0 ? -3 : 3), 64 + CGFloat($0) * 11) }, strands: 1) { _ in 8 })
+            }
+        },
+        "港风卷发": { s in
+            s.back = [sheet(to: 140, spread: 10, amp: 4, period: 24)]
+            s.front = [cap(lift: 13, side: 7, puff: 6, peak: 5, fringe: .side(cx - 12))]
+                + locks(to: 144, spread: 10, bulge: 6, amp: 5, period: 24, inner: 16, strands: 3)
+        },
+        "复古手推波": { s in
+            s.back = [sheet(to: 92, half: 27)]
+            var pieces = [cap(lift: 6, side: 3, peak: 5, fringe: .side(cx - 13))]
+                + locks(to: 94, spread: -3, bulge: 4, amp: 3.4, period: 14, grow: 0.1, inner: 20, curl: true, strands: 1)
+            var bands = Piece(fill: CGMutablePath())
+            for y in stride(from: CGFloat(44), to: 92, by: 11) {
+                for sgn in [-1, 1] as [CGFloat] {
+                    let band = CGMutablePath()
+                    band.move(to: pt(cx + sgn * 14, y + 2))
+                    band.addQuadCurve(to: pt(cx + sgn * 30, y - 1), control: pt(cx + sgn * 23, y - 4))
+                    bands.shine.append((band, 2.6))
+                }
+            }
+            pieces.append(bands)
+            s.front = pieces
+        },
+        "内扣长发": { s in
+            s.back = [sheet(to: 148)]
+            s.front = [cap(fringe: .part(46))] + locks(to: 150, spread: 1, bulge: 4, inner: 14, curl: true, strands: 3)
+        },
+        "一刀切": { s in
+            s.back = [sheet(to: 128, half: 32)]
+            s.front = [cap(lift: 6.5, fringe: .part(46))] + locks(to: 128, spread: 2, bulge: 1, inner: 13, end: .flat, strands: 3)
+        },
+        "法式短发": { s in
+            s.back = [sheet(to: 95, spread: 1, half: 27)]
+            s.front = [cap(lift: 8, side: 5, puff: 4, fringe: .air(62))] + locks(to: 97, spread: 0, bulge: 5, amp: 1.8, period: 18, inner: 19, curl: true)
+        },
+        "鲻鱼头": { s in
+            s.back = [sheet(to: 124, half: 25)]
+            s.front = [cap(lift: 9.5, side: 4, puff: 4, fringe: .choppy(60, cx + 5), origin: cx + 5)]
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 25, 66), pt(cx + sgn * 25, 96), pt(cx + sgn * 24, 116), pt(cx + sgn * 30, 128)], strands: 1) { 9 * (1 - $0 * 0.75) })
+            }
+        },
+        "水母头": { s in
+            s.back = [sheet(to: 168, half: 22)]
+            s.front = [cap(lift: 8.5, side: 6, puff: 5, fringe: .blunt(64))] + locks(to: 92, spread: 1, bulge: 7, inner: 19, end: .round)
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 25, 90), pt(cx + sgn * 25, 130), pt(cx + sgn * 24, 168)], strands: 1) { 8 * (1 - $0 * 0.4) })
+            }
+        },
+        "外翘短发": { s in
+            s.back = [sheet(to: 94, half: 25)]
+            s.front = [cap(lift: 7.5, fringe: .air(62))] + locks(to: 90, spread: -3, bulge: 2, inner: 20, strands: 1)
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 25, 78), pt(cx + sgn * 27, 92), pt(cx + sgn * 37, 98)], strands: 1) { 9 * (1 - $0 * 0.8) })
+            }
+        },
+        "短卷发": { s in
+            var dice = Dice(state: 23)
+            s.shift = 6
+            s.back = [Piece(fill: CGPath(ellipseIn: CGRect(x: cx - 33, y: 34, width: 66, height: 66), transform: nil))]
+            s.front = [cap(lift: 9, side: 5, puff: 5, end: 80, fringe: .wavy(57))]
+            for sgn in [-1, 1] as [CGFloat] {
+                for y in stride(from: CGFloat(58), through: 96, by: 8) { s.front.append(curl(pt(cx + sgn * (29 + dice.next() * 3), y), 7, turn: dice.next() * 6)) }
+            }
+            for x in stride(from: CGFloat(-18), through: 18, by: 9) { s.front.append(curl(pt(cx + x, 38 + abs(x) * 0.25), 6, turn: dice.next() * 6)) }
+        },
+        "锁骨内扣": { s in
+            s.back = [sheet(to: 114, spread: 1)]
+            s.front = [cap(fringe: .air(63))] + locks(to: 116, spread: 1, bulge: 4.5, inner: 16, curl: true)
+        },
+        "低丸子头": { s in
+            pulledBack(&s, fringe: .part(46))
+            s.back = [curl(pt(cx + 4, 98), 15, turn: 2)]
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 21, 56), pt(cx + sgn * 25, 74), pt(cx + sgn * 22, 94)], strands: 0) { 3 * (1 - $0 * 0.7) })
+            }
+        },
+        "双丸子头": { s in
+            pulledBack(&s, fringe: .air(62))
+            s.shift = 16
+            s.back = [curl(pt(cx - 21, 25), 11, turn: 1), curl(pt(cx + 21, 25), 11, turn: 4)]
+        },
+        "半扎丸子": { s in
+            medium(&s, fringe: .part(46))
+            s.shift = 14
+            s.back.append(curl(pt(cx, 24), 11, turn: 2.2))
+        },
+        "公主头": { s in
+            medium(&s, fringe: .part(46))
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 10, 40), pt(cx + sgn * 23, 48), pt(cx + sgn * 30, 62)], strands: 2) { 9 - 3 * $0 })
+            }
+            s.ties = [CGRect(x: cx - 33, y: 60, width: 6, height: 6), CGRect(x: cx + 27, y: 60, width: 6, height: 6)]
+        },
+        "侧马尾": { s in
+            pulledBack(&s, fringe: .side(cx + 10))
+            s.front.append(tube([pt(cx - 20, 88), pt(cx - 28, 100), pt(cx - 30, 126), pt(cx - 26, 158)], strands: 2) { t in
+                (8 + 7 * sin(min(t * 2, 1) * .pi / 2)) * (t > 0.75 ? 1 - (t - 0.75) / 0.25 * 0.75 : 1)
+            })
+            s.ties = [CGRect(x: cx - 26, y: 89, width: 10, height: 6)]
+        },
+        "鱼骨辫": { s in
+            s.back = [ribbon(left: Edge(top: cx - 22, bottom: cx - 12), right: Edge(top: cx + 24, bottom: cx + 22), top: 60, bottom: 104, end: .flat, strands: 0)]
+            s.front = [cap(lift: 6.5, fringe: .part(46))]
+            s.front.append(ribbon(left: Edge(top: cx + 20, bottom: cx + 17), right: Edge(top: cx + 28, bottom: cx + 30, bulge: 2), top: 60, bottom: 94, end: .flat, strands: 2))
+            s.front += braid(from: pt(cx + 24, 90), to: pt(cx + 26, 148), width: 18, count: 11)
+            s.ties = [CGRect(x: cx + 21, y: 148, width: 10, height: 4.5)]
+        },
+        "双麻花辫": { s in
+            s.front = [cap(lift: 6.5, side: 3, end: 78, fringe: .part(46))]
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front += braid(from: pt(cx + sgn * 25, 76), to: pt(cx + sgn * 29, 146), width: 15, count: 8)
+                s.ties.append(CGRect(x: cx + sgn * 29 - 4.5, y: 146, width: 9, height: 4.5))
+            }
+        },
+        "拳击辫": { s in
+            pulledBack(&s, fringe: .part(46))
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front += braid(from: pt(cx + sgn * 9, 34), to: pt(cx + sgn * 24, 70), width: 11, count: 5)
+                s.front += braid(from: pt(cx + sgn * 25, 78), to: pt(cx + sgn * 27, 140), width: 11, count: 8)
+            }
+        },
+        "新娘盘发": { s in
+            pulledBack(&s, fringe: .side(cx - 9))
+            s.back = [curl(pt(cx - 10, 96), 11, turn: 1), curl(pt(cx + 10, 96), 11, turn: 3), curl(pt(cx, 104), 10, turn: 5)]
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 22, 58), pt(cx + sgn * 27, 70), pt(cx + sgn * 23, 82), pt(cx + sgn * 27, 94), pt(cx + sgn * 24, 104)], strands: 0) { 3.4 * (1 - $0 * 0.6) })
+            }
+        },
+        "泡泡马尾": { s in
+            pulledBack(&s)
+            s.shift = 16
+            var y: CGFloat = 24
+            for i in 0..<5 {
+                s.back.append(curl(pt(cx + 24 + CGFloat(i) * 4, y + 6), 11, turn: CGFloat(i)))
+                s.ties.append(CGRect(x: cx + 20 + CGFloat(i) * 4, y: y - 5, width: 8, height: 4))
+                y += 21
+            }
+        },
+        "脏辫": { s in
+            s.back = [sheet(to: 150, spread: 1)]
+            s.front = [cap(lift: 6, fringe: .open(46))]
+            for x in stride(from: CGFloat(-32), through: 32, by: 5.8) where abs(x) > 17 {
+                s.front += braid(from: pt(cx + x * 0.86, 58), to: pt(cx + x, 152), width: 6, count: 13)
+            }
+        },
+        "法式刘海": { s in
+            medium(&s, fringe: .curtain)
+            s.front.append(tube([pt(cx - 3, 42), pt(cx - 9, 54), pt(cx - 11, 63)], strands: 1) { 8 * (1 - $0 * 0.5) })
+            s.front.append(tube([pt(cx + 3, 42), pt(cx + 9, 54), pt(cx + 11, 63)], strands: 1) { 8 * (1 - $0 * 0.5) })
+        },
+        "眉上刘海": { s in medium(&s, fringe: .blunt(55)) },
+        "龙须刘海": { s in
+            medium(&s, fringe: .part(46))
+            for sgn in [-1, 1] as [CGFloat] {
+                s.front.append(tube([pt(cx + sgn * 2, 40), pt(cx + sgn * 14, 54), pt(cx + sgn * 17, 74), pt(cx + sgn * 15, 92)], strands: 0) { 3.2 * (1 - $0 * 0.6) })
+            }
+        },
+        "大光明": { s in
+            s.ears = true
+            s.back = [sheet(to: 140)]
+            s.front = [cap(lift: 8, side: 2.5, puff: 2, end: 72, fringe: .open(42), origin: cx)]
+        },
         "寸头": { s in
             men(&s)
             s.pale = true

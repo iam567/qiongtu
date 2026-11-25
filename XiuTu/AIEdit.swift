@@ -134,6 +134,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
             return [
                 AIPreset(title: "一键修复", symbol: "wand.and.stars", prompt: "你是一位摄影大师兼调色师。先判断这张照片在曝光和色彩上的毛病（过曝或欠曝、逆光导致主体太暗、高光溢出、暗部死黑、偏色和白平衡不准、灰雾、反差不足或过头），然后把它调成一张曝光和色彩都正确、自然好看的照片。只改曝光、明暗和颜色；不要移动、裁剪、旋转或改变画面里任何东西的形状和位置，结果要和原图逐像素对齐。", toneOnly: true),
                 AIPreset(title: "修跑焦", symbol: "camera.viewfinder", prompt: AIIntent.refocusPrompt, faceCrop: true),
+                AIPreset(title: "修手", symbol: "hand.raised", prompt: EditorModel.handPrompt),
                 AIPreset(title: "修手抖", symbol: "hand.raised.slash", prompt: AIIntent.deshakePrompt),
                 AIPreset(title: "去 AI 味", symbol: "camera.aperture", prompt: "这张照片看起来有明显的 AI 生成感。把它处理成一张真正用相机拍出来的照片：去掉过度锐化和边缘白边，细节恢复成镜头自然的清晰度（焦外和远处自然地柔一点）；皮肤要有真实的毛孔和细微的不均匀，不要塑料感和过度磨皮；降低过高的饱和度、过度的 HDR 和处处都亮的均匀光，恢复真实的明暗层次和阴影；去掉过分完美对称、过分干净的痕迹，保留真实世界里自然的小瑕疵。不要额外加胶片颗粒。画面内容、构图、人物长相、姿势和服装都不变。"),
                 AIPreset(title: "修过曝", symbol: "sun.max", prompt: "修复过曝：找回高光里的层次，压住发白的天空和皮肤。只改曝光、明暗和颜色；不要移动、裁剪、旋转或改变画面里任何东西的形状和位置，结果要和原图逐像素对齐。", toneOnly: true),
@@ -270,6 +271,36 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
                 AIPreset(title: "齐刘海", symbol: "scissors", prompt: "把发型换成整齐的齐刘海，其余头发不变。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
                 AIPreset(title: "中分", symbol: "scissors", prompt: "把发型换成中分，露出额头。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
                 AIPreset(title: "侧分", symbol: "scissors", prompt: "把发型换成三七侧分，发根蓬松。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "层次长发", symbol: "scissors", prompt: "把发型换成有明显高低层次、发尾轻盈的层次长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "韩系大卷", symbol: "scissors", prompt: "把发型换成韩系慵懒大卷长发，发根蓬松，卷度集中在中段到发尾。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "木马卷", symbol: "scissors", prompt: "把发型换成卷筒感明显、一束一束的木马卷长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "蛋卷头", symbol: "scissors", prompt: "把发型换成细密蓬松的蛋卷烫长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "螺旋卷", symbol: "scissors", prompt: "把发型换成一缕一缕的螺旋卷长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "港风卷发", symbol: "scissors", prompt: "把发型换成八九十年代港风的蓬松大卷，发根高高蓬起。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "复古手推波", symbol: "scissors", prompt: "把发型换成老上海复古手推波纹的中短发，贴头的 S 形波浪。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "内扣长发", symbol: "scissors", prompt: "把发型换成发尾整齐内扣的柔顺长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "一刀切", symbol: "scissors", prompt: "把发型换成发尾齐平、利落的一刀切中长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "法式短发", symbol: "scissors", prompt: "把发型换成齐下巴、带随性弧度的法式短发，配轻薄刘海。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "鲻鱼头", symbol: "scissors", prompt: "把发型换成前短后长、层次分明的鲻鱼头。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "水母头", symbol: "scissors", prompt: "把发型换成上层是短波波头、下层垂着长发的水母头。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "外翘短发", symbol: "scissors", prompt: "把发型换成发尾向外翘的短发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "短卷发", symbol: "scissors", prompt: "把发型换成蓬松的短卷发，长度到耳下。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "锁骨内扣", symbol: "scissors", prompt: "把发型换成长度到锁骨、发尾内扣的中长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "低丸子头", symbol: "scissors", prompt: "把发型换成脑后低低盘起的丸子头，留几缕碎发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "双丸子头", symbol: "scissors", prompt: "把发型换成头顶左右两个小丸子的双丸子头。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "半扎丸子", symbol: "scissors", prompt: "把发型换成上半部分扎成小丸子、下半部分披散的半扎发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "公主头", symbol: "scissors", prompt: "把发型换成两侧头发往后束起、其余披散的公主头。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "侧马尾", symbol: "scissors", prompt: "把发型换成扎在一侧、垂到胸前的侧马尾。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "鱼骨辫", symbol: "scissors", prompt: "把发型换成精致的鱼骨辫，垂在一侧胸前。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "双麻花辫", symbol: "scissors", prompt: "把发型换成左右两条麻花辫，垂在胸前。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "拳击辫", symbol: "scissors", prompt: "把发型换成贴着头皮往后编的两条拳击辫。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "新娘盘发", symbol: "scissors", prompt: "把发型换成优雅的新娘盘发，脑后盘起，脸侧留几缕卷发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "泡泡马尾", symbol: "scissors", prompt: "把发型换成一节一节鼓起来的泡泡高马尾。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "脏辫", symbol: "scissors", prompt: "把发型换成一根一根的细脏辫长发。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "法式刘海", symbol: "scissors", prompt: "把发型换成随性轻盈、两侧稍长的法式刘海，其余头发不变。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "眉上刘海", symbol: "scissors", prompt: "把发型换成齐整的眉上短刘海，其余头发不变。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "龙须刘海", symbol: "scissors", prompt: "把发型换成额前两侧各垂一缕的龙须刘海，其余头发不变。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
+                AIPreset(title: "大光明", symbol: "scissors", prompt: "把发型换成全部往后梳、露出整个额头的大光明造型。发色保持不变；头发要有真实的发丝细节，和头型、发际线自然贴合。脸、五官、表情、肤色、妆容、衣服、姿势和背景都不变，必须还是同一个人。", hairCrop: true),
             ]
         case .hairColor:
             if GenderSetting.shared.isMale { return MalePresets.hairColors }
@@ -379,6 +410,8 @@ struct AIEdit {
     var area: CGImage? = nil
     /// 换衣服：这一块一定用 AI 的（人身上、下巴以下）。
     var core: CGImage? = nil
+    /// 换发型：颜色按区域外面校正，变化看得更细（零碎的发丝也算变了）。
+    var outside = false
     /// AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。
     var shift: CGVector = .zero
     /// AI 的结果是黑白的：只取光影时把颜色也去掉。
@@ -433,7 +466,7 @@ struct AIEdit {
             .cropped(to: extent)
         if changedOnly, !toneOnly {
             r = ChangeKeep.apply(original: image, ai: r, area: area.map { AIRegion.scaled(mask: $0, to: extent, feather: false) },
-                                 core: core.map { AIRegion.scaled(mask: $0, to: extent, feather: false) })
+                                 core: core.map { AIRegion.scaled(mask: $0, to: extent, feather: false) }, fine: outside)
         }
         if toneOnly {
             r = ToneTransfer.apply(original: image, graded: r)

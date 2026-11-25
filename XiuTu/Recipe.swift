@@ -124,6 +124,8 @@ struct EditRecipe: Codable {
             return RecipeStep(title: "皮肤", detail: "", symbol: "drop", action: nil)
         case .reshape:
             return RecipeStep(title: "面部重塑", detail: "", symbol: "face.dashed", action: nil)
+        case .retouch:
+            return RecipeStep(title: "手动消除", detail: "", symbol: "bandage", action: nil)
         case .bodyTone:
             return RecipeStep(title: "身体提亮", detail: "", symbol: "sun.max", action: nil)
         case .shape:

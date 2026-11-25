@@ -19,7 +19,8 @@ struct FaceKeep: Equatable {
     // MARK: 找对应
 
     /// original：发给 AI 之前的照片；result：AI 的结果。对不上的脸（转了头、换了表情、太小）不贴。
-    static func match(original: CGImage, result: CGImage) -> [FaceKeep] {
+    /// forehead = false：额头不贴（换发型时刘海会变）。
+    static func match(original: CGImage, result: CGImage, forehead: Bool = true) -> [FaceKeep] {
         let from = FaceDetector.detect(in: original).filter { $0.hasReliableLandmarks }
         let to = FaceDetector.detect(in: result).filter { $0.hasReliableLandmarks }
         guard !from.isEmpty, !to.isEmpty else { return [] }
@@ -30,7 +31,7 @@ struct FaceKeep: Equatable {
             var best: (index: Int, keep: FaceKeep, error: Double)?
             for (i, source) in from.enumerated() where !used.contains(i) {
                 guard CGFloat(original.width) * source.box.width >= 50,
-                      let (keep, error) = fit(source, unit(original), face, unit(result)) else { continue }
+                      let (keep, error) = fit(source, unit(original), face, unit(result), forehead) else { continue }
                 if best == nil || error < best!.error { best = (i, keep, error) }
             }
             if let best {
@@ -47,7 +48,7 @@ struct FaceKeep: Equatable {
         return CGSize(width: CGFloat(image.width) / long, height: CGFloat(image.height) / long)
     }
 
-    private static func fit(_ s: FaceInfo, _ su: CGSize, _ d: FaceInfo, _ du: CGSize) -> (FaceKeep, Double)? {
+    private static func fit(_ s: FaceInfo, _ su: CGSize, _ d: FaceInfo, _ du: CGSize, _ forehead: Bool) -> (FaceKeep, Double)? {
         func scaled(_ p: [CGPoint], _ u: CGSize) -> [CGPoint] { p.map { CGPoint(x: $0.x * u.width, y: $0.y * u.height) } }
         var from: [CGPoint] = [], to: [CGPoint] = []
         for (x, y) in [(s.leftEye, d.leftEye), (s.rightEye, d.rightEye), (s.nose, d.nose), (s.outerLips, d.outerLips)]
@@ -78,12 +79,12 @@ struct FaceKeep: Equatable {
         // 五官位置的平均误差：超过脸宽的 4.5% 说明表情或角度变了。
         let error = (sum / n).squareRoot() / Double(width)
         guard error < 0.045, a > 0 else { return nil }
-        guard let outline = outline(d, du) else { return nil }
+        guard let outline = outline(d, du, forehead) else { return nil }
         return (FaceKeep(a: a, b: b, tx: tx, ty: ty, outline: outline, width: width), error)
     }
 
     /// 脸的范围：下颌线往里收一点，上面盖到眉毛上方的额头，不碰到头发和背景。
-    private static func outline(_ f: FaceInfo, _ u: CGSize) -> [CGPoint]? {
+    private static func outline(_ f: FaceInfo, _ u: CGSize, _ forehead: Bool) -> [CGPoint]? {
         func scaled(_ p: [CGPoint]) -> [CGPoint] { p.map { CGPoint(x: $0.x * u.width, y: $0.y * u.height) } }
         let jaw = scaled(f.contour), eyes = scaled(f.leftEye + f.rightEye), brows = scaled(f.leftBrow + f.rightBrow), lips = scaled(f.outerLips)
         guard jaw.count >= 5, !eyes.isEmpty, !lips.isEmpty else { return nil }
@@ -93,11 +94,12 @@ struct FaceKeep: Equatable {
         let e = center(eyes), m = center(lips)
         let up = CGVector(dx: e.x - m.x, dy: e.y - m.y)
         // 眉毛往上推半个"眼到嘴"的距离，就是额头。
-        var top = (brows.isEmpty ? eyes : brows).map { CGPoint(x: $0.x + up.dx * 0.32, y: $0.y + up.dy * 0.32) }
+        let lift: CGFloat = forehead ? 0.32 : 0
+        var top = (brows.isEmpty ? eyes : brows).map { CGPoint(x: $0.x + up.dx * lift, y: $0.y + up.dy * lift) }
         top.append(contentsOf: brows)
         let hull = convexHull(jaw + top)
         let c = center(hull)
-        return hull.map { CGPoint(x: c.x + ($0.x - c.x) * 0.93, y: c.y + ($0.y - c.y) * 0.93) }
+        return hull.map { CGPoint(x: c.x + ($0.x - c.x) * (forehead ? 0.93 : 0.82), y: c.y + ($0.y - c.y) * (forehead ? 0.93 : 0.86)) }
     }
 
     private static func convexHull(_ points: [CGPoint]) -> [CGPoint] {

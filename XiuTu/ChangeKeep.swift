@@ -13,6 +13,16 @@ enum ChangeKeep {
     }
     """)
 
+    /// 看得更细：一两根飘着的发丝也算变了。
+    private static let fineKernel = CIColorKernel(source: """
+    kernel vec4 changedFine(__sample a, __sample b) {
+        vec3 d = abs(linear_to_srgb(clamp(a.rgb, 0.0, 1.0)) - linear_to_srgb(clamp(b.rgb, 0.0, 1.0)));
+        float v = max(d.r, max(d.g, d.b));
+        float m = smoothstep(0.03, 0.08, v);
+        return vec4(m, m, m, 1.0);
+    }
+    """)
+
     private static let outsideKernel = CIColorKernel(source: """
     kernel vec4 outsideGain(__sample s, __sample o, __sample a) {
         vec3 e = vec3(0.004);
@@ -31,7 +41,7 @@ enum ChangeKeep {
     }
 
     /// area：只允许在这一块里换（白 = 允许），不给就整张都可以。core：这一块一定用 AI 的（换衣服）。
-    static func apply(original: CIImage, ai: CIImage, area: CIImage?, core: CIImage? = nil) -> CIImage {
+    static func apply(original: CIImage, ai: CIImage, area: CIImage?, core: CIImage? = nil, fine: Bool = false) -> CIImage {
         let extent = original.extent
         let long = max(extent.width, extent.height)
         func soft(_ image: CIImage, _ radius: CGFloat) -> CIImage {
@@ -39,17 +49,17 @@ enum ChangeKeep {
         }
         // AI 常把整张的明暗颜色带偏一点：先按大范围拉回原图的样子，再比较、再贴。
         let toned: CIImage
-        if core != nil, let area {
+        if core != nil || fine, let area {
             toned = tonedByOutside(ai, original, area, soft, long * 0.12)
         } else {
             toned = ToneTransfer.apply(original: ai, graded: original, radius: long * 0.05)
         }
-        let sigma = long * 0.0028
-        guard let diff = diffKernel?.apply(extent: extent, arguments: [soft(original, sigma), soft(toned, sigma)]) else { return ai }
+        let sigma = long * (fine ? 0.0016 : 0.0028)
+        guard let diff = (fine ? fineKernel : diffKernel)?.apply(extent: extent, arguments: [soft(original, sigma), soft(toned, sigma)]) else { return ai }
         // 去掉零星的小点，再往外扩一点、羽化，接缝落在没变的地方。
         var mask = diff
             .clampedToExtent()
-            .applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: long * 0.0012])
+            .applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: fine ? 0 : long * 0.0012])
             .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: long * 0.009])
             .cropped(to: extent)
         mask = soft(mask, long * 0.005)

@@ -117,6 +117,9 @@ final class EditorModel {
     var wardrobeSaving = false
     var wardrobeSaved: String?
     var outfitPatch = false
+    var retouchState = RetouchState()
+    /// AI 修手：面板只留涂抹和开始。
+    var aiHandFix = false
     var bodyToneState = BodyToneState()
     var smartCropState = SmartCropState()
     @ObservationIgnored var smartCropTask: Task<Void, Never>?
@@ -130,6 +133,7 @@ final class EditorModel {
     @ObservationIgnored private var aiCore: CGImage?
     /// 这次结果是换衣服（结果面板上的说法不一样）。
     var aiResultOutfit = false
+    var aiResultHair = false
     @ObservationIgnored private var aiShift: CGVector = .zero
     /// 这条指令只该动身体的哪一块。
     var aiPart: BodyPart?
@@ -486,6 +490,8 @@ final class EditorModel {
             beginSkin()
         case .shape:
             beginShape()
+        case .retouch:
+            beginRetouch()
         case .smartCrop:
             beginSmartCrop()
         case .bodyTone:
@@ -562,6 +568,7 @@ final class EditorModel {
         outfitReference = nil
         wardrobePick = nil
         wardrobeSaved = nil
+        aiHandFix = false
         outfitPatch = false
         aiShift = .zero
         aiLift = []
@@ -903,6 +910,8 @@ final class EditorModel {
             op = skinOp()
         case .shape:
             op = shapeOp()
+        case .retouch:
+            op = retouchOp()
         case .smartCrop:
             cancelSmartCrop()
             op = smartCropOp()
@@ -1066,6 +1075,8 @@ final class EditorModel {
             return makeupPendingOps()
         case .some(.skin):
             return skinPendingOps()
+        case .some(.retouch):
+            return retouchState.stroke != nil ? nil : retouchOp().map { [$0] } ?? []
         case .some(.bodyTone):
             return bodyToneState.showMask || bodyToneState.flash ? nil : bodyToneOp().map { [$0] } ?? []
         case .some(.effect):
@@ -1371,7 +1382,7 @@ final class EditorModel {
         return AIEdit(result: result, strokes: aiStrokes, frame: aiFrame, ellipse: aiEllipse, strength: aiStrength,
                       toneOnly: aiToneOnly && tool == .ai, soften: soften,
                       faces: aiKeepFace && tool == .ai ? aiFaces : [],
-                      changedOnly: aiCanKeepRest && aiChangedOnly && tool == .ai, area: aiArea, core: aiCore, shift: aiShift,
+                      changedOnly: aiCanKeepRest && aiChangedOnly && tool == .ai, area: aiArea, core: aiCore, outside: aiResultHair, shift: aiShift,
                       mono: aiMono, recipe: recipe)
     }
 
@@ -1487,39 +1498,19 @@ final class EditorModel {
             return
         }
         if aiHairCrop, !aiHasRegion, let cg = baseUIImage?.cgImage {
-            // 美发：找到脸，把头、头发连同肩膀这一块发出去；找不到脸就发整张图。
+            // 美发：把头连同上半身、垂下来和飘在外面的头发整块发出去，换掉的旧头发才不会留下零碎的发梢。
             aiError = nil
             aiRunning = true
             aiStarted = Date()
+            let shapes = aiGroup == .hairStyle || aiPresetTitle.isEmpty
             Task { [weak self] in
-                let found = await Task.detached(priority: .userInitiated) { FaceDetector.detect(in: cg) }.value
+                let crop = await Task.detached(priority: .userInitiated) { OutfitMask.hairCrop(cg) }.value
                 guard let self, self.tool == .ai, self.aiRunning else { return }
                 self.aiRunning = false
-                guard let face = found.first else {
-                    self.aiFrame = nil
-                    self.launchAI(prompt: prompt, strokes: [], crop: nil, guidance: true, identity: true)
-                    return
-                }
-                let size = self.pixelSize()
-                let bw = face.box.width * size.width, bh = face.box.height * size.height
-                let side = max(bw, bh) * 5.2
-                // 往下偏一些：长发、披肩发主要在脸的下面和两侧。
-                let cx = face.box.midX * size.width, cy = face.box.midY * size.height + bh * 0.6
-                let frame = CGRect(x: cx - side / 2, y: cy - side / 2, width: side, height: side)
-                    .intersection(CGRect(origin: .zero, size: size))
-                // 这一块几乎占满全图时直接发整张，省得贴回去多一道接缝。
-                if frame.width * frame.height > size.width * size.height * 0.8 {
-                    self.aiFrame = nil
-                    self.launchAI(prompt: prompt, strokes: [], crop: nil, guidance: true, identity: true)
-                    return
-                }
-                self.aiFrame = CGRect(x: frame.minX / size.width, y: frame.minY / size.height,
-                                      width: frame.width / size.width, height: frame.height / size.height)
-                // 贴回的范围比发出去的小一圈：羽化要完全落在发出去的这一块里面，否则边上会露出一条硬边。
-                let inner = frame.insetBy(dx: frame.width * 0.11, dy: frame.height * 0.11)
-                self.aiEllipse = CGRect(x: inner.minX / size.width, y: inner.minY / size.height,
-                                        width: inner.width / size.width, height: inner.height / size.height)
-                self.launchAI(prompt: prompt, strokes: [], crop: self.aiFrame, guidance: false, identity: true)
+                self.aiFrame = nil
+                self.aiEllipse = nil
+                let text = prompt + (shapes ? OutfitCatalog.hairClean : "") + OutfitCatalog.hairKeep
+                self.launchAI(prompt: text, strokes: [], crop: crop, guidance: false, identity: true, hair: true)
             }
             return
         }
@@ -1603,7 +1594,7 @@ final class EditorModel {
     /// identity = true：必须还是同一个人的任务。画质设成"自动"时改用高画质，并要求尽量忠实于原图。
     private func launchAI(prompt: String, strokes: [MosaicStroke], crop: CGRect?, guidance: Bool, identity: Bool = false,
                           reframe: AIReframe = .original, references: [UIImage] = [], recomposed: Bool = false,
-                          outfit: Bool = false, overflow: Bool = false) {
+                          outfit: Bool = false, overflow: Bool = false, hair: Bool = false) {
         guard let proxy, let started = tool else { return }
         guard var endpoint = AISettings.shared.endpoint() else {
             aiError = "还没有设置 \(AISettings.shared.active.shortTitle) 的 API Key。"
@@ -1635,14 +1626,16 @@ final class EditorModel {
         aiArea = nil
         aiCore = nil
         aiResultOutfit = false
+        aiResultHair = false
         wardrobeSaved = nil
         aiShift = .zero
         aiUsageText = nil
         // 整张重画、还是同一个人的这几组：出来以后把原图的脸贴回去。
-        var before = started == .ai && outfit ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty
+        let whole = outfit || hair
+        var before = started == .ai && whole ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty
             && [.master, .camera, .compose, .light, .body].contains(aiGroup) ? baseUIImage?.cgImage : nil
         // 只动一部分的这两组：没动的地方用原图。
-        var part = started == .ai && outfit ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty && !recomposed && reframe == .original
+        var part = started == .ai && whole ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty && !recomposed && reframe == .original
             && [.body, .remove].contains(aiGroup) ? baseUIImage?.cgImage : nil
         let bodyOnly = aiGroup == .body
         let bodyPart = aiPart
@@ -1660,7 +1653,7 @@ final class EditorModel {
                         return Renderer.shared.rasterize(full, maxDimension: 2560)?.cg
                     }.value ?? before
                 }
-                if outfit {
+                if whole {
                     // 脸在画面里可能很小：比较和找脸用大一点的图。
                     let sent = ops
                     if let big = await Task.detached(priority: .userInitiated, operation: {
@@ -1678,14 +1671,14 @@ final class EditorModel {
                     }.value
                     if let r {
                         self?.aiBase = r.ci
-                        if before != nil, !outfit { before = r.cg }
-                        if part != nil, !outfit { part = r.cg }
+                        if before != nil, !whole { before = r.cg }
+                        if part != nil, !whole { part = r.cg }
                     }
                 }
                 var image = try await AIRunner.run(endpoint: endpoint, prompt: prompt, proxy: proxy, ops: ops,
                                                    strokes: strokes, crop: crop, appendGuidance: guidance, reframe: reframe,
                                                    references: references)
-                if outfit, let crop {
+                if whole, let crop {
                     // 只发了人这一块：拼回整张，后面就和发整张的一样处理。
                     let piece = image, sent = ops
                     if let whole = await Task.detached(priority: .userInitiated, operation: {
@@ -1716,7 +1709,7 @@ final class EditorModel {
                                                      size: CGSize(width: part.width, height: part.height))
                         if let limit = bodyPart?.area(in: part) { area = ChangeKeep.intersect(area, limit) }
                     }
-                    var faces = before.map { FaceKeep.match(original: $0, result: image) } ?? []
+                    var faces = before.map { FaceKeep.match(original: $0, result: image, forehead: !hair) } ?? []
                     // 五官是在没对齐的 AI 图上量的，跟着整体平移一起挪。
                     for i in faces.indices { faces[i].move(shift, size: CGSize(width: image.width, height: image.height)) }
                     if outfit, let part {
@@ -1725,6 +1718,7 @@ final class EditorModel {
                         (area, core) = OutfitMask.masks(original: part, ai: image, overflow: overflow, keepHead: still)
                         if still { faces = [] }
                     }
+                    if hair, let part { area = OutfitMask.hairArea(original: part, ai: image, crop: crop) }
                     return (faces, MonoCheck.isMono(image), shift, area, core)
                 }.value
                 guard let self, !Task.isCancelled, self.tool == started else { return }
@@ -1736,7 +1730,8 @@ final class EditorModel {
                 self.aiArea = found.3
                 self.aiCore = found.4
                 self.aiResultOutfit = outfit
-                if outfit { self.aiFrame = nil }
+                self.aiResultHair = hair
+                if whole { self.aiFrame = nil }
                 self.aiCanKeepRest = part != nil
                 self.aiUsageText = usage?.summary
                 self.aiResult = result

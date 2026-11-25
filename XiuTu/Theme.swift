@@ -11,7 +11,7 @@ enum Theme {
 /// 编辑器里的各个工具。
 enum Tool: String, Hashable, Identifiable {
     case crop, filter, adjust, mosaic, text, sticker, ai, beauty, liquify
-    case doodle, mark, frame, backdrop, collage, layers, reshape, makeup, skin, shape, effect, graphic, bodyTone, smartCrop
+    case doodle, mark, frame, backdrop, collage, layers, reshape, makeup, skin, shape, effect, graphic, bodyTone, smartCrop, retouch
 
     var id: String { rawValue }
 
@@ -38,6 +38,7 @@ enum Tool: String, Hashable, Identifiable {
         case .shape: return "塑形"
         case .bodyTone: return "身体提亮"
         case .smartCrop: return "智能构图"
+        case .retouch: return "手动消除"
         case .effect: return "特效"
         case .graphic: return "形状"
         }
@@ -66,6 +67,7 @@ enum Tool: String, Hashable, Identifiable {
         case .shape: return "figure.arms.open"
         case .bodyTone: return "sun.max"
         case .smartCrop: return "viewfinder"
+        case .retouch: return "bandage"
         case .effect: return "sparkles.rectangle.stack"
         case .graphic: return "square.on.circle"
         }

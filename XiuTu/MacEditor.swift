@@ -531,7 +531,7 @@ struct MacToolStrip: View {
         case .beauty, .reshape, .makeup, .skin: return .beauty
         case .shape, .liquify, .bodyTone: return .body
         case .smartCrop: return .ai
-        case .crop, .collage, .layers: return .tools
+        case .crop, .collage, .layers, .retouch: return .tools
         default: return .deco
         }
     }
