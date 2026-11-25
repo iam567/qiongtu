@@ -280,7 +280,7 @@ struct AIPanel: View {
         model.aiFaceCrop = preset.faceCrop
         model.aiHairCrop = preset.hairCrop
         // 大师"原构图"：只取 AI 的光影和颜色，细节全用原图，脸上不会有涂抹感。
-        model.aiToneOnly = preset.toneOnly || (model.aiGroup == .master && !model.aiMasterCompose)
+        model.aiToneOnly = preset.toneOnly || (model.aiGroup == .master && !(model.aiMasterCompose && model.aiMasterRedraw))
         model.aiPart = preset.part
         if preset.prompt.hasSuffix("：") { editPrompt() } else { model.runAI() }
     }
@@ -327,6 +327,13 @@ struct AIPanel: View {
                 HStack(spacing: 8) {
                     Chip(title: "只取光影色彩", selected: model.aiToneOnly) { model.setAIToneOnly(true) }
                     Chip(title: "完整采用 AI 图", selected: !model.aiToneOnly) { model.setAIToneOnly(false) }
+                    Spacer()
+                }
+            }
+            if model.aiCrop != nil {
+                HStack(spacing: 8) {
+                    Chip(title: "按取景裁切", selected: model.aiCropOn) { model.setAICropOn(true) }
+                    Chip(title: "不裁切", selected: !model.aiCropOn) { model.setAICropOn(false) }
                     Spacer()
                 }
             }

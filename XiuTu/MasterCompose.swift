@@ -10,8 +10,28 @@ enum MasterCompose {
     static let keepTail = "只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。"
 
     /// 像真照片的要求：AI 整张重画时最容易磨皮、涂抹、到处加光斑。
-    static let realTail = "画质要求：真实镜头拍出来的样子。皮肤保留毛孔、细纹和自然的颜色不均，头发是一根根真实的发丝，布料有织纹；" +
-        "不磨皮、不涂抹，不要绘画感和塑料感，不要发光的边缘、柔光滤镜或到处的光斑，焦外按真实镜头自然虚化。画面里不要画出网格、辅助线或取景框。"
+    static let realTail = "画质要求：真实镜头拍出来的样子。人物的脸和皮肤和原照片一样干净好看：不增加斑点、痘印、毛孔、皱纹、油光，也不磨皮、不涂抹；头发和布料自然真实；" +
+        "不要绘画感和塑料感，不要发光的边缘、柔光滤镜或到处的光斑，焦外按真实镜头自然虚化。画面里不要画出网格、辅助线或取景框。"
+
+    /// 只从原图裁：让能看图的 AI 按这位大师的取景挑一个框。
+    static func cropPrompt(title: String, frame: String?, hasPerson: Bool) -> String? {
+        guard let master = MasterCatalog.byTitle[title],
+              let f = master.frames.first(where: { $0.title == frame }) ?? master.frames.first else { return nil }
+        return """
+        你是摄影师兼图片编辑。从这张照片里按下面的取景要求裁出最好的一张：只能裁切，不能补画面外的东西。
+        取景要求：\(hasPerson ? f.person : f.scene)。这位摄影师的构图特点：\(master.compose)。
+        照片条件和要求对不上时，取最接近、最好看的；原图已经合适就少裁或不裁。
+        裁出来的宽高比和原照片相同，宽和高都不小于 300（千分坐标）。头顶、脸、手、脚不要切到，不切在关节上，主体周围留出空间，边缘干净，横竖线端正；画面里有很多裙摆、建筑这样好看的内容时，不要把它们切得太碎。
+        坐标用千分比：照片左上角是 (0,0)，右下角是 (1000,1000)，box 依次是 左、上、右、下。
+        只输出 JSON，不要别的字：{"crops":[{"box":[左,上,右,下]}]}
+        """
+    }
+
+    /// 把框扩成指定比例（归一化坐标下的宽 / 高是 1，也就是和原图同比例），不出画面。
+    static func sameRatio(_ box: CGRect) -> CGRect {
+        let side = min(max(box.width, box.height), 1)
+        return CGRect(x: min(max(box.midX - side / 2, 0), 1 - side), y: min(max(box.midY - side / 2, 0), 1 - side), width: side, height: side)
+    }
 
     /// 换成"按大师的构图重新取景"。frame 是选的哪一种取景。找不到这位大师或指令不是标准格式时返回 nil。
     static func prompt(_ base: String, title: String, frame: String? = nil, hasPerson: Bool) -> String? {

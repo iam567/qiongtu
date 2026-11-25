@@ -43,6 +43,13 @@ struct MasterCard: View {
                     .foregroundStyle(Theme.dim)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if model.aiMasterCompose {
+                HStack(spacing: 8) {
+                    Chip(title: "从原图裁", selected: !model.aiMasterRedraw) { model.aiMasterRedraw = false }
+                    Chip(title: "AI 重画", selected: model.aiMasterRedraw) { model.aiMasterRedraw = true }
+                    Spacer(minLength: 0)
+                }
+            }
             HStack(spacing: 10) {
                 Button { model.pickMaster(nil) } label: {
                     Label("换一位", systemImage: "chevron.left")

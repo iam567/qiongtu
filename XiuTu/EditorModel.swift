@@ -118,6 +118,12 @@ final class EditorModel {
     @ObservationIgnored var smartCropTask: Task<Void, Never>?
     var aiMasterPick: String?
     var aiMasterFrame: String?
+    /// 大师构图：false = 只从原图裁（默认），true = AI 整张重画。
+    var aiMasterRedraw = false
+    /// AI 按大师取景挑的框，以及要不要用。
+    var aiCrop: CGRect?
+    var aiCropOn = true
+    @ObservationIgnored private var aiLUT: Data?
     /// 整张重画时贴回原图的脸：开关，以及这次对上的脸。
     var aiKeepFace = true
     var aiFaces: [FaceKeep] = []
@@ -551,6 +557,8 @@ final class EditorModel {
         aiToneOnly = false
         aiPendingRecipe = nil
         aiMasterPick = nil
+        aiCrop = nil
+        aiLUT = nil
         aiFaces = []
         aiMono = false
         aiCanKeepRest = false
@@ -1381,6 +1389,7 @@ final class EditorModel {
                       toneOnly: aiToneOnly && tool == .ai, soften: soften,
                       faces: aiKeepFace && tool == .ai ? aiFaces : [],
                       changedOnly: aiCanKeepRest && aiChangedOnly && tool == .ai, area: aiArea, core: aiCore, shift: aiShift,
+                      lut: aiToneOnly ? aiLUT : nil, cropAfter: aiCropOn && tool == .ai ? aiCrop : nil,
                       mono: aiMono, recipe: recipe)
     }
 
@@ -1402,6 +1411,11 @@ final class EditorModel {
 
     func setAIToneOnly(_ on: Bool) {
         aiToneOnly = on
+        renderAI()
+    }
+
+    func setAICropOn(_ on: Bool) {
+        aiCropOn = on
         renderAI()
     }
 
@@ -1443,6 +1457,41 @@ final class EditorModel {
                        masterFrame: aiGroup == .master ? aiMasterFrame : nil)
         aiEllipse = nil
         aiResultReframed = false
+        if aiGroup == .master, aiMasterCompose, !aiMasterRedraw, MasterCatalog.byTitle[aiPresetTitle] != nil, let cg = baseUIImage?.cgImage {
+            // 大师构图：先让 AI 挑一个裁切框，再只取它的色彩；人和画面都是原图的像素，不重画。
+            guard let endpoint = AISettings.shared.endpoint() else {
+                aiError = "还没有设置 \(AISettings.shared.active.shortTitle) 的 API Key。"
+                return
+            }
+            let title = aiPresetTitle, frame = aiMasterFrame
+            let tone = aiRegenRound > 0 ? base + AIVariation.clause(for: .master, round: aiRegenRound) : base
+            aiFrame = nil
+            aiToneOnly = true
+            aiError = nil
+            aiRunning = true
+            aiStarted = Date()
+            aiTask = Task { [weak self] in
+                do {
+                    let hasPerson = await Task.detached(priority: .userInitiated) { MasterCompose.hasPerson(in: cg) }.value
+                    guard let ask = MasterCompose.cropPrompt(title: title, frame: frame, hasPerson: hasPerson),
+                          let jpeg = AIOneShot.prepared(UIImage(cgImage: cg), maxSide: 1600).jpegData(compressionQuality: 0.88) else { return }
+                    let text = try await AIClient.look(endpoint, prompt: ask, jpeg: jpeg)
+                    guard let self, !Task.isCancelled, self.tool == .ai, self.aiRunning else { return }
+                    let box = SmartCrop.boxes(text, key: "crops").first.map(MasterCompose.sameRatio)
+                    self.aiRunning = false
+                    self.launchAI(prompt: tone, strokes: [], crop: nil, guidance: true)
+                    // 几乎是整张就不裁。
+                    self.aiCrop = box.flatMap { $0.width < 0.96 ? $0 : nil }
+                } catch is CancellationError {
+                    self?.aiRunning = false
+                } catch {
+                    guard let self, !Task.isCancelled else { return }
+                    self.aiRunning = false
+                    self.aiError = error.localizedDescription
+                }
+            }
+            return
+        }
         if aiGroup == .master, aiMasterCompose, MasterCompose.prompt(base, title: aiPresetTitle, hasPerson: true) != nil,
            let cg = baseUIImage?.cgImage {
             // 大师构图：整张交给 AI 重新取景，不看涂抹；结果和原图对不齐，按换过构图处理。
@@ -1641,6 +1690,9 @@ final class EditorModel {
         aiHasResult = false
         aiFaces = []
         aiMono = false
+        aiCrop = nil
+        aiCropOn = true
+        aiLUT = nil
         aiCanKeepRest = false
         aiArea = nil
         aiCore = nil
@@ -1654,6 +1706,8 @@ final class EditorModel {
         var part = started == .ai && outfit ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty && !recomposed && reframe == .original
             && [.body, .remove].contains(aiGroup) ? baseUIImage?.cgImage : nil
         let bodyOnly = aiGroup == .body
+        // 大师、相机的色彩换算成整图颜色表。
+        let wantsLUT = started == .ai && [.master, .camera].contains(aiGroup) && !recomposed && reframe == .original && crop == nil && strokes.isEmpty
         let bodyPart = aiPart
         _ = AIClient.takeLastUsage()
         aiRunning = true
@@ -1697,7 +1751,7 @@ final class EditorModel {
                 let usage = AIClient.takeLastUsage()
                 if let cost = usage?.cost { AISettings.shared.addSpend(cost) }
                 let (before, part) = (before, part)
-                let found = await Task.detached(priority: .userInitiated) { () -> ([FaceKeep], Bool, CGVector, CGImage?, CGImage?) in
+                let found = await Task.detached(priority: .userInitiated) { () -> ([FaceKeep], Bool, CGVector, CGImage?, CGImage?, Data?) in
                     let image = result
                     let shift = part.map { ChangeKeep.shift(original: $0, ai: image) } ?? .zero
                     var area: CGImage?
@@ -1717,7 +1771,8 @@ final class EditorModel {
                         (area, core) = OutfitMask.masks(original: part, ai: image, overflow: overflow, keepHead: still)
                         if still { faces = [] }
                     }
-                    return (faces, MonoCheck.isMono(image), shift, area, core)
+                    let lut = wantsLUT ? before.flatMap { StyleLUT.fit(original: $0, graded: image) } : nil
+                    return (faces, MonoCheck.isMono(image), shift, area, core, lut)
                 }.value
                 guard let self, !Task.isCancelled, self.tool == started else { return }
                 self.aiFaces = found.0
@@ -1725,6 +1780,9 @@ final class EditorModel {
                 self.aiShift = found.2
                 self.aiArea = found.3
                 self.aiCore = found.4
+                self.aiLUT = found.5
+                // 大师的色彩先给八成半，不过头；滑块能拉满。
+                if self.aiGroup == .master, started == .ai, !self.aiResultReframed, !recomposed { self.aiStrength = 0.85 }
                 self.aiResultOutfit = outfit
                 if outfit { self.aiFrame = nil }
                 self.aiCanKeepRest = part != nil

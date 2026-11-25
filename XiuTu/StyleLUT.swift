@@ -109,7 +109,10 @@ enum StyleLUT {
             for b0 in 0..<n { for g0 in 0..<n { for r0 in 0..<n {
                 let i = index(r0, g0, b0)
                 let base = SIMD3<Float>(Float(r0), Float(g0), Float(b0)) * inv
-                let v = (base + out[i]).clamped(lowerBound: .zero, upperBound: SIMD3(repeating: 1))
+                // 变化太猛的压住：单个颜色最多挪 0.3，避免夸张。
+                let reach = max(abs(out[i].x), abs(out[i].y), abs(out[i].z))
+                let d = reach > 0.3 ? out[i] * (0.3 / reach) : out[i]
+                let v = (base + d).clamped(lowerBound: .zero, upperBound: SIMD3(repeating: 1))
                 p[i * 4] = v.x
                 p[i * 4 + 1] = v.y
                 p[i * 4 + 2] = v.z

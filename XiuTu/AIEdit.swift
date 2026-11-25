@@ -358,6 +358,10 @@ struct AIEdit {
     var core: CGImage? = nil
     /// AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。
     var shift: CGVector = .zero
+    /// 只取色彩时用的整图颜色表（大师、相机）：比局部跟光更自然，没有光晕。
+    var lut: Data? = nil
+    /// 最后再裁成这一块（归一化，左上原点）：大师构图从原图裁。
+    var cropAfter: CGRect? = nil
     /// AI 的结果是黑白的：只取光影时把颜色也去掉。
     var mono = false
     /// 这一步是怎么发起的（套用到新照片时再跑一遍）；涂抹、融合出来的没有。
@@ -386,6 +390,15 @@ struct AIEdit {
     }
 
     func apply(to image: CIImage) -> CIImage {
+        let out = edited(image)
+        guard let c = cropAfter else { return out }
+        let e = out.extent
+        let r = CGRect(x: e.minX + c.minX * e.width, y: e.maxY - c.maxY * e.height, width: c.width * e.width, height: c.height * e.height)
+            .integral.intersection(e)
+        return out.cropped(to: r).transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
+    }
+
+    private func edited(_ image: CIImage) -> CIImage {
         let extent = image.extent
         if reframed {
             // 长边和原图一样长，比例按 AI 给的。
@@ -413,7 +426,7 @@ struct AIEdit {
                                  core: core.map { AIRegion.scaled(mask: $0, to: extent, feather: false) })
         }
         if toneOnly {
-            r = ToneTransfer.apply(original: image, graded: r)
+            r = lut.map { StyleLUT.apply($0, to: image, strength: 1) } ?? ToneTransfer.apply(original: image, graded: r)
             if mono { r = r.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0]) }
             if let area {
                 r = r.applyingFilter("CIBlendWithMask", parameters: [
@@ -421,7 +434,7 @@ struct AIEdit {
                 ]).cropped(to: extent)
             }
         }
-        r = Self.softened(r, amount: soften)
+        if !(toneOnly && lut != nil) { r = Self.softened(r, amount: soften) }
         if !toneOnly { r = keepFaces(r, original: image) }
 
         var mask: CIImage?
