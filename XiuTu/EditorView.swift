@@ -492,7 +492,7 @@ struct EditorView: View {
                            onTap: { point in model.adjustTapped(at: point) })
                 .overlay(alignment: .bottomTrailing) { compareButton }
         case .some(.mosaic), .some(.ai), .some(.liquify), .some(.doodle), .some(.mark):
-            ZoomableCanvas(image: model.shownImage, handlers: DrawHandlers(
+            ZoomableCanvas(image: model.shownImage, handlers: model.tool == .ai && model.aiBrushLocked ? nil : DrawHandlers(
                 began: { point, scale in model.strokeBegan(at: point, displayScale: scale) },
                 moved: { point in model.strokeMoved(to: point) },
                 ended: { model.strokeEnded() },

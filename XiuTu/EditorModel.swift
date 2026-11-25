@@ -1365,7 +1365,7 @@ final class EditorModel {
     // MARK: AI 修图
 
     /// 换衣服挑款式时不能涂抹：误划一笔会变成只改那一块。要涂的在"补换"里。
-    private var aiBrushLocked: Bool { aiGroup == .outfit && !outfitPatch }
+    var aiBrushLocked: Bool { aiGroup == .outfit && !outfitPatch }
 
     var aiHasRegion: Bool { aiStrokes.contains { !$0.erase } }
 
