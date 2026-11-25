@@ -29,6 +29,7 @@ enum Route: Hashable {
     case studio(assetID: String)
     case manga
     case batch(UUID?)
+    case outfits
     case rawPicker
     case editorFile(URL)
     case history
@@ -51,6 +52,7 @@ struct RootView: View {
                      startStudio: { path.append(.studioPicker) },
                      startManga: { path.append(.manga) },
                      startBatch: { path.append(.batch(nil)) },
+                     startOutfits: { path.append(.outfits) },
                      startRaw: { path.append(.rawPicker) },
                      startHistory: { path.append(.history) },
                      startFavorite: { path.append(.favoriteFace) },
@@ -88,6 +90,8 @@ struct RootView: View {
                         MangaView { path.removeAll() }
                     case .batch(let style):
                         BatchStyleView(styleID: style) { if !path.isEmpty { path.removeLast() } }
+                    case .outfits:
+                        BatchStyleView(outfits: true) { if !path.isEmpty { path.removeLast() } }
                     case .rawPicker:
                         RawPickerView(onEdit: { url in path.append(.editorFile(url)) }, onClose: { path.removeAll() })
                     case .editorFile(let url):
@@ -158,6 +162,7 @@ struct HomeView: View {
     var startStudio: () -> Void = {}
     var startManga: () -> Void = {}
     var startBatch: () -> Void = {}
+    var startOutfits: () -> Void = {}
     var startRaw: () -> Void = {}
     var startHistory: () -> Void = {}
     var startFavorite: () -> Void = {}
@@ -238,6 +243,7 @@ struct HomeView: View {
                     featureButton(symbol: "camera.aperture", title: "摄影棚", subtitle: "一张照片拍一组套图 · 166 个场景 · 29 位摄影师", action: startStudio)
                     featureButton(symbol: "book.pages.fill", title: "漫画人生", subtitle: "把生活照片画成漫画 · 15 种画风", action: startManga)
                     featureButton(symbol: "square.stack.3d.down.right.fill", title: "统一风格", subtitle: "一批照片调成同一种色彩", action: startBatch)
+                    featureButton(symbol: "hanger", title: "批量换衣服", subtitle: "一组照片换上同一身衣服", action: startOutfits)
                     featureButton(symbol: history.hasPassword ? "lock.fill" : "photo.stack", title: "历史图库",
                                   subtitle: "\(history.items.count) 张", action: startHistory)
                     featureButton(symbol: "star.fill", title: "满意脸型",

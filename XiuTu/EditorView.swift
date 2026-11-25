@@ -222,6 +222,14 @@ struct EditorView: View {
             if let name = ProcessInfo.processInfo.environment["XIUTU_TOOL"] {
                 if name.hasPrefix("ai:"), let group = AIPresetGroup(rawValue: String(name.dropFirst(3))) {
                     handle(.ai(group))
+                    if ProcessInfo.processInfo.environment["XIUTU_WARDROBE"] != nil {
+                        model.saveToWardrobe()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                            model.pickWardrobe(WardrobeStore.shared.items.first)
+                            guard let item = WardrobeStore.shared.items.first, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil else { return }
+                            model.runOutfit(prompt: Wardrobe.prompt(item, skirt: .normal), title: item.name)
+                        }
+                    }
                     if let t = ProcessInfo.processInfo.environment["XIUTU_OUTFIT"], let o = OutfitCatalog.all.first(where: { $0.title == t }) {
                         model.pickOutfit(o)
                         if ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil {

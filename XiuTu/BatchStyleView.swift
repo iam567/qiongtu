@@ -5,6 +5,10 @@ import UniformTypeIdentifiers
 struct BatchStyleView: View {
     /// 进来就选这个风格。
     var styleID: UUID?
+    /// 批量换衣服：进来就选这一身。
+    var outfitID: UUID?
+    /// 批量换衣服页（没有指定哪一身时）。
+    var outfits = false
     var onClose: () -> Void
 
     @State private var model = BatchStyleModel()
@@ -23,7 +27,7 @@ struct BatchStyleView: View {
         ZStack {
             (Platform.isMac ? MacTheme.canvas : Theme.bg).ignoresSafeArea()
             if Platform.isMac {
-                MacWorkbench(title: "统一风格", onClose: onClose) {
+                MacWorkbench(title: title, onClose: onClose) {
                     if model.doneCount > 0 {
                         Button { pickingFolder = true } label: { Text(exportTitle).macProminent() }
                             .buttonStyle(.plain)
@@ -61,7 +65,13 @@ struct BatchStyleView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
-        .onAppear { if let styleID, let style = store.styles.first(where: { $0.id == styleID }) { model.style = style } }
+        .onAppear {
+            if outfits || outfitID != nil {
+                model.outfitMode = true
+                model.outfit = WardrobeStore.shared.items.first { $0.id == outfitID } ?? WardrobeStore.shared.items.first
+            }
+            if let styleID, let style = store.styles.first(where: { $0.id == styleID }) { model.style = style }
+        }
         .onDisappear { model.stop() }
         .sheet(isPresented: $showSettings) { SettingsView() }
         // 几个选文件的面板各挂在一个视图上，互不覆盖。
@@ -81,7 +91,7 @@ struct BatchStyleView: View {
                 guard case .success(let folder) = result else { return }
                 Task {
                     let n = await model.exportAll(to: folder)
-                    MacSession.shared.editorDirty = false
+                    if outfitID == nil { MacSession.shared.editorDirty = false }
                     show("已导出 \(n) 张")
                 }
             }
@@ -99,6 +109,11 @@ struct BatchStyleView: View {
             }
             Button("取消", role: .cancel) { renaming = nil }
         }
+        .onDrop(of: [.fileURL, .image], isTargeted: nil) { providers in
+            guard Platform.isMac, !model.running else { return false }
+            Task { model.add(urls: await MacRootView.urls(from: providers)) }
+            return true
+        }
         // Mac：照片拖进窗口就加进来。
         .onChange(of: MacSession.shared.dropped, initial: true) {
             let files = MacSession.shared.dropped
@@ -111,10 +126,12 @@ struct BatchStyleView: View {
             }
             #endif
         }
-        .onChange(of: model.doneCount) { if Platform.isMac, model.doneCount > 0 { MacSession.shared.editorDirty = true } }
+        .onChange(of: model.doneCount) { if Platform.isMac, outfitID == nil, model.doneCount > 0 { MacSession.shared.editorDirty = true } }
     }
 
     @State private var pickingFiles = false
+
+    private var title: String { model.outfitMode ? "批量换衣服" : "统一风格" }
 
     private var exportTitle: String {
         if model.exporting { return "正在导出 \(model.exported + 1)/\(model.doneCount)" }
@@ -127,7 +144,7 @@ struct BatchStyleView: View {
                 Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold)).frame(width: 44, height: 44)
             }
             Spacer()
-            Text("统一风格").font(.system(size: 16, weight: .bold))
+            Text(title).font(.system(size: 16, weight: .bold))
             Spacer()
             Button {
                 Task {
@@ -213,9 +230,9 @@ struct BatchStyleView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            styles
+            if model.outfitMode { clothes } else { styles }
             photos
-            if !model.items.isEmpty, model.doneCount > 0 {
+            if !model.outfitMode, !model.items.isEmpty, model.doneCount > 0 {
                 HStack(spacing: 12) {
                     Text("强度").font(.system(size: 13)).foregroundStyle(Theme.dim)
                     Slider(value: Binding(get: { Double(model.strength) }, set: { model.setStrength(CGFloat($0), editing: true) }), in: 0...1) { editing in
@@ -266,6 +283,36 @@ struct BatchStyleView: View {
                 }
             }
             .padding(.vertical, 2)
+        }
+        .disabled(model.running)
+    }
+
+    /// 选衣橱里的一身、裙摆。
+    private var clothes: some View {
+        VStack(spacing: 10) {
+            if WardrobeStore.shared.items.isEmpty {
+                Text("衣橱是空的，先在 AI 修图的换衣服里存一身")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HScroll {
+                HRow(alignment: .top, spacing: 10) {
+                    ForEach(WardrobeStore.shared.items) { item in
+                        tile(title: item.name, selected: model.outfit?.id == item.id) {
+                            if let image = WardrobeStore.shared.image(item) { Image(uiImage: image).resizable().scaledToFill() } else { Theme.chip }
+                        } action: { if !model.running { model.outfit = item } }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            HScroll {
+                HRow(spacing: 8) {
+                    ForEach(OutfitSkirt.allCases) { skirt in
+                        Chip(title: "裙摆 " + skirt.title, selected: model.skirt == skirt) { model.skirt = skirt }
+                    }
+                }
+            }
         }
         .disabled(model.running)
     }
@@ -370,10 +417,10 @@ struct BatchStyleView: View {
                             .overlay(alignment: .topTrailing) { CornerBadge(text: "AI").offset(x: -6, y: -5) }
                     }
                     .buttonStyle(.plain)
-                    .disabled(model.style == nil)
+                    .disabled(model.outfitMode ? model.outfit == nil : model.style == nil)
                 }
                 if model.remaining > 0 || model.items.isEmpty {
-                    let ready = model.style != nil && model.remaining > 0
+                    let ready = (model.outfitMode ? model.outfit != nil : model.style != nil) && model.remaining > 0
                     Button { model.start() } label: {
                         Text(model.doneCount > 0 ? "继续处理 \(model.remaining) 张" : "开始处理 \(model.remaining) 张")
                             .font(.system(size: 15, weight: .bold))

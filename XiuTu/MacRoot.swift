@@ -31,7 +31,7 @@ final class MacSession {
     /// 菜单栏里点了漫画人生 / 满意脸型。
     var page: Page?
 
-    enum Page: Equatable { case manga, faces, batch(UUID?) }
+    enum Page: Equatable { case manga, faces, batch(UUID?), outfits }
 
     private init() {}
 }
@@ -49,11 +49,12 @@ struct MacRootView: View {
         case manga
         case faces
         case batch(UUID?, id: UUID)
+        case outfits(id: UUID)
         case draft
 
         var isEditing: Bool {
             switch self {
-            case .editor, .stitch, .raw, .cover, .studio, .manga, .batch, .draft: return true
+            case .editor, .stitch, .raw, .cover, .studio, .manga, .batch, .outfits, .draft: return true
             default: return false
             }
         }
@@ -191,6 +192,8 @@ struct MacRootView: View {
             FavoriteFaceView(onClose: close)
         case .batch(let style, let id):
             BatchStyleView(styleID: style, onClose: close).id(id)
+        case .outfits(let id):
+            BatchStyleView(outfits: true, onClose: close).id(id)
         case .draft:
             EditorView(assetID: "", restoreDraft: true, initialTool: nil) { close() }
         }
@@ -206,6 +209,7 @@ struct MacRootView: View {
         case .manga: screen = .manga
         case .faces: screen = .faces
         case .batch(let style): screen = .batch(style, id: UUID())
+        case .outfits: screen = .outfits(id: UUID())
         }
     }
 
@@ -309,6 +313,7 @@ struct MacRootView: View {
             case "studio": purpose = .studio
             case "manga": screen = .manga
             case "faces": screen = .faces
+            case "outfits": screen = .outfits(id: UUID())
             case "batch": screen = .batch(nil, id: UUID())
             default: break
             }
@@ -319,7 +324,7 @@ struct MacRootView: View {
             switch screen {
             case .cover: purpose = .cover
             case .studio: purpose = .studio
-            case .manga, .faces, .batch:
+            case .manga, .faces, .batch, .outfits:
                 session.dropped = files
                 return
             default: break
@@ -453,6 +458,7 @@ struct MacStartView: View {
             sideButton("摄影棚…", symbol: "camera") { onOpen(.studio) }
             sideButton("漫画人生", symbol: "book.pages") { onPage(.manga) }
             sideButton("统一风格", symbol: "square.stack.3d.down.right") { onPage(.batch(nil)) }
+            sideButton("批量换衣服", symbol: "hanger") { onPage(.outfits) }
             Rectangle().fill(MacTheme.line).frame(height: 1).padding(.vertical, 8)
             sideButton(history.hasPassword ? "历史图库（已加密）" : "历史图库", symbol: "photo.stack", action: onHistory)
             sideButton("满意脸型", symbol: "star") { onPage(.faces) }
@@ -598,6 +604,7 @@ struct MacCommands: Commands {
             Button("摄影棚…") { MacSession.shared.importing = .studio }
             Button("漫画人生") { MacSession.shared.page = .manga }
             Button("统一风格") { MacSession.shared.page = .batch(nil) }
+            Button("批量换衣服") { MacSession.shared.page = .outfits }
             Button("满意脸型") { MacSession.shared.page = .faces }
         }
         CommandGroup(replacing: .saveItem) {

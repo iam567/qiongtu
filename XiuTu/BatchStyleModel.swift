@@ -17,11 +17,18 @@ final class BatchStyleModel {
         var result: UIImage?
         /// AI 的色彩换算成的颜色对照表。
         var cube: Data?
+        /// 换衣服：出好的成品（原图分辨率）。
+        var output: URL?
+        var finished: Bool { cube != nil || output != nil }
         var status: Status = .pending
         var error: String?
     }
 
     var style: SavedStyle? = StyleStore.shared.styles.first
+    /// 批量换衣服（true）还是统一风格。
+    var outfitMode = false
+    var outfit: WardrobeItem?
+    var skirt: OutfitSkirt = .normal
     var items: [Item] = []
     var selected: UUID?
     var running = false
@@ -128,6 +135,10 @@ final class BatchStyleModel {
 
     private func run(_ ids: [UUID]) {
         guard !running, !ids.isEmpty else { return }
+        if outfitMode {
+            runOutfits(ids)
+            return
+        }
         var reference = style.flatMap { StyleStore.shared.image($0) }
         #if DEBUG
         if ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil { reference = items.first?.preview }
@@ -180,7 +191,7 @@ final class BatchStyleModel {
             }
             guard let self else { return }
             for i in self.items.indices where self.items[i].status == .running {
-                self.items[i].status = self.items[i].cube == nil ? .pending : .done
+                self.items[i].status = self.items[i].finished ? .done : .pending
             }
             self.running = false
         }
@@ -189,7 +200,7 @@ final class BatchStyleModel {
     func stop() {
         task?.cancel()
         for i in items.indices where items[i].status == .running {
-            items[i].status = items[i].cube == nil ? .pending : .done
+            items[i].status = items[i].finished ? .done : .pending
         }
         running = false
     }
@@ -202,6 +213,90 @@ final class BatchStyleModel {
                                             appendGuidance: false, references: [reference])
         guard let cube = StyleLUT.fit(original: small.cg, graded: graded) else { throw AIError(text: "AI 的结果用不了，可以重做这一张。") }
         return cube
+    }
+
+    // MARK: 换衣服
+
+    private func runOutfits(_ ids: [UUID]) {
+        guard let outfit, let item = WardrobeStore.shared.items.first(where: { $0.id == outfit.id }) else {
+            error = "先选一身衣服"
+            return
+        }
+        guard let endpoint = AISettings.shared.endpoint() else {
+            error = "还没有设置 \(AISettings.shared.active.shortTitle) 的 API Key。"
+            return
+        }
+        let references = WardrobeStore.shared.references(item)
+        let prompt = Wardrobe.prompt(item, skirt: skirt), overflow = skirt == .overflow
+        error = nil
+        running = true
+        for i in items.indices where ids.contains(items[i].id) {
+            items[i].status = .pending
+            items[i].error = nil
+        }
+        task = Task { [weak self] in
+            var failures = 0
+            for id in ids {
+                guard let self, !Task.isCancelled, let i = self.items.firstIndex(where: { $0.id == id }) else { break }
+                self.items[i].status = .running
+                self.started = Date()
+                do {
+                    let url = self.items[i].url
+                    let output = try await Self.dress(url: url, references: references, prompt: prompt, overflow: overflow, endpoint: endpoint)
+                    if let cost = AIClient.takeLastUsage()?.cost {
+                        self.spent += cost
+                        AISettings.shared.addSpend(cost)
+                    }
+                    let shown = await Task.detached(priority: .userInitiated) { Self.thumbnail(output, 1400) }.value
+                    guard !Task.isCancelled, let j = self.items.firstIndex(where: { $0.id == id }) else { break }
+                    self.items[j].output = output
+                    self.items[j].result = shown
+                    self.items[j].status = .done
+                    self.selected = id
+                    failures = 0
+                } catch is CancellationError {
+                    break
+                } catch {
+                    guard !Task.isCancelled, let j = self.items.firstIndex(where: { $0.id == id }) else { break }
+                    self.items[j].status = .failed
+                    self.items[j].error = error.localizedDescription
+                    self.error = "\(self.items[j].name)：\(error.localizedDescription)"
+                    failures += 1
+                    if failures >= 2 { break }
+                }
+            }
+            guard let self else { return }
+            for i in self.items.indices where self.items[i].status == .running {
+                self.items[i].status = self.items[i].finished ? .done : .pending
+            }
+            self.running = false
+        }
+    }
+
+    /// 给一张照片换上这身衣服，成品按原图分辨率写成临时文件。背景、脸、头用原图（和单张换衣服一样的做法）。
+    private nonisolated static func dress(url: URL, references: [UIImage], prompt: String, overflow: Bool, endpoint: AIEndpoint) async throws -> URL {
+        guard let full = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]),
+              let proxy = Renderer.shared.rasterize(full, maxDimension: 5120),
+              let big = Renderer.shared.rasterize(proxy.ci, maxDimension: 3072) else { throw AIError(text: "这张照片打不开。") }
+        guard let person = PersonSegmenter.mask(for: big.cg), PersonSegmenter.main(person) != nil else { throw AIError(text: "没有认出人。") }
+        let crop = overflow ? nil : OutfitMask.crop(big.cg)
+        _ = AIClient.takeLastUsage()
+        var image = try await AIRunner.run(endpoint: endpoint, prompt: prompt, proxy: proxy.ci, ops: [], strokes: [], crop: crop,
+                                           appendGuidance: false, references: references)
+        if let crop, let whole = OutfitMask.paste(image, crop: crop, over: proxy.ci) { image = whole }
+        try Task.checkCancellation()
+        let shift = ChangeKeep.shift(original: big.cg, ai: image)
+        var faces = FaceKeep.match(original: big.cg, result: image)
+        for i in faces.indices { faces[i].move(shift, size: CGSize(width: image.width, height: image.height)) }
+        let still = !faces.isEmpty && faces.allSatisfy { $0.isStill }
+        let masks = OutfitMask.masks(original: big.cg, ai: image, overflow: overflow, keepHead: still)
+        let edit = AIEdit(result: image, strokes: [], faces: still ? [] : faces, changedOnly: true, area: masks.area, core: masks.core, shift: shift)
+        guard let data = jpeg(edit.apply(to: full), like: url, space: full.colorSpace) else { throw AIError(text: "成品没有存成功。") }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("outfit-batch")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let out = folder.appendingPathComponent(UUID().uuidString + ".jpg")
+        try data.write(to: out)
+        return out
     }
 
     // MARK: 预览和导出
@@ -228,8 +323,12 @@ final class BatchStyleModel {
     /// 原图分辨率的成品，保留相机信息（拍摄时间、机型、光圈……）。
     nonisolated static func render(url: URL, cube: Data, strength: CGFloat) -> Data? {
         guard let full = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
-        let out = StyleLUT.apply(cube, to: full, strength: strength)
-        let space = full.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        return jpeg(StyleLUT.apply(cube, to: full, strength: strength), like: url, space: full.colorSpace)
+    }
+
+    /// 写成 JPEG，保留原照片的相机信息。
+    nonisolated static func jpeg(_ out: CIImage, like url: URL, space original: CGColorSpace?) -> Data? {
+        let space = original.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!
         guard let cg = Renderer.shared.context.createCGImage(out, from: out.extent, format: .RGBA8, colorSpace: space) else { return nil }
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
@@ -255,13 +354,13 @@ final class BatchStyleModel {
         exporting = true
         exported = 0
         for item in items where item.status == .done {
-            guard let cube = item.cube else { continue }
-            let url = item.url, strength = self.strength
-            guard let data = await Task.detached(priority: .userInitiated, operation: {
-                Self.render(url: url, cube: cube, strength: strength)
+            let url = item.url, strength = self.strength, cube = item.cube, output = item.output
+            guard let data = await Task.detached(priority: .userInitiated, operation: { () -> Data? in
+                if let output { return try? Data(contentsOf: output) }
+                return cube.flatMap { Self.render(url: url, cube: $0, strength: strength) }
             }).value, await write(item, data) else { continue }
             exported += 1
-            if HistoryStore.shared.enabled { await HistoryStore.shared.add(data: data, ext: "jpg", source: "统一风格") }
+            if HistoryStore.shared.enabled { await HistoryStore.shared.add(data: data, ext: "jpg", source: outfitMode ? "批量换衣服" : "统一风格") }
         }
         exporting = false
         return exported

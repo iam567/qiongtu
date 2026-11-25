@@ -65,7 +65,8 @@ struct BodyToneParams {
     /// 和身体颜色像不像：看色度，明暗放得很宽（阴影里的皮肤也算）。
     private static let pickKernel = CIColorKernel(source: library + """
     kernel vec4 bodyPick(__sample s, vec3 tone, float range) {
-        vec3 a = btYCC(clamp(s.rgb, 0.0, 1.0)), b = btYCC(tone);
+        // 管线里是线性光，肤色和阈值都是按 sRGB 定的：先换过去。
+        vec3 a = btYCC(linear_to_srgb(clamp(s.rgb, 0.0, 1.0))), b = btYCC(tone);
         // 暗处色度会缩小：按亮度比折算后再比。
         float k = clamp(b.x / max(a.x, 0.06), 0.6, 2.2);
         vec2 d = a.yz * k - b.yz;
@@ -81,9 +82,9 @@ struct BodyToneParams {
 
     private static let toneKernel = CIColorKernel(source: library + """
     kernel vec4 bodyTone(__sample s, __sample mid, __sample m, vec4 p, float rosy, vec3 gain, float mean) {
-        vec3 c = clamp(s.rgb, 0.0, 1.0);
+        vec3 c = linear_to_srgb(clamp(s.rgb, 0.0, 1.0));
         // 匀肤色：把大块的明暗不均往平均亮度拉。
-        float y = dot(mid.rgb, vec3(0.299, 0.587, 0.114));
+        float y = dot(linear_to_srgb(clamp(mid.rgb, 0.0, 1.0)), vec3(0.299, 0.587, 0.114));
         float level = clamp(mean / max(y, 0.05), 0.65, 1.6);
         float e = mix(1.0, level, p.z * 0.6);
         // 匹配脸色 + 匀肤色：提亮不溢出。
@@ -95,7 +96,7 @@ struct BodyToneParams {
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c += vec3(0.045, 0.006, -0.05) * p.w * l * 2.0 * (1.0 - l * 0.5);
         c += vec3(0.045, -0.018, -0.004) * rosy * l * 2.0 * (1.0 - l * 0.5);
-        return vec4(mix(s.rgb, clamp(c, 0.0, 1.0), m.r), s.a);
+        return vec4(mix(s.rgb, srgb_to_linear(clamp(c, 0.0, 1.0)), m.r), s.a);
     }
     """)
 

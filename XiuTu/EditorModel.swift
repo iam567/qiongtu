@@ -112,6 +112,10 @@ final class EditorModel {
     var outfitColor = ""
     var outfitSkirt: OutfitSkirt = .normal
     var outfitReference: UIImage?
+    /// 衣橱：选了哪一身、正在存、刚存好的名字。
+    var wardrobePick: WardrobeItem?
+    var wardrobeSaving = false
+    var wardrobeSaved: String?
     var outfitPatch = false
     var bodyToneState = BodyToneState()
     var smartCropState = SmartCropState()
@@ -556,6 +560,8 @@ final class EditorModel {
         aiResultOutfit = false
         outfitPick = nil
         outfitReference = nil
+        wardrobePick = nil
+        wardrobeSaved = nil
         outfitPatch = false
         aiShift = .zero
         aiLift = []
@@ -1347,7 +1353,7 @@ final class EditorModel {
     }
 
     /// 当前这次 AI 结果对应的编辑步骤；还没有结果时是 nil。
-    private var currentAIEdit: AIEdit? {
+    var currentAIEdit: AIEdit? {
         guard let result = aiResult else { return nil }
         // "只取光影色彩"只属于 AI 修图；美颜要的就是 AI 改过的脸，不能套这个模式。
         // 柔化只给整张重画的结果用；美颜只换脸部那一块，不柔化。
@@ -1465,8 +1471,8 @@ final class EditorModel {
         if !aiHasRegion, aiGroup == .outfit || typed, let cg = baseUIImage?.cgImage {
             let text = prompt.contains(OutfitCatalog.keep) ? prompt : prompt + "。" + OutfitCatalog.clean + OutfitCatalog.keep
             // 点款式的看选的裙摆；自己写的看说没说裙摆要溢出去。
-            let overflow = aiPresetTitle.isEmpty ? ["溢出", "铺满", "铺开", "拖尾", "大裙摆", "巨大"].contains { base.contains($0) } : outfitSkirt == .overflow && outfitPick != nil
-            let references = aiGroup == .outfit ? [outfitReference].compactMap { $0 } : []
+            let overflow = aiPresetTitle.isEmpty ? ["溢出", "铺满", "铺开", "拖尾", "大裙摆", "巨大"].contains { base.contains($0) } : outfitSkirt == .overflow && (outfitPick != nil || wardrobePick != nil)
+            let references = aiGroup != .outfit ? [] : wardrobePick.map { WardrobeStore.shared.references($0) } ?? [outfitReference].compactMap { $0 }
             aiFrame = nil
             aiToneOnly = false
             aiError = nil
@@ -1629,6 +1635,7 @@ final class EditorModel {
         aiArea = nil
         aiCore = nil
         aiResultOutfit = false
+        wardrobeSaved = nil
         aiShift = .zero
         aiUsageText = nil
         // 整张重画、还是同一个人的这几组：出来以后把原图的脸贴回去。

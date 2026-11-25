@@ -358,6 +358,17 @@ struct AIPanel: View {
                     .monospacedDigit()
                     .frame(width: 34, alignment: .trailing)
             }
+            if model.aiResultOutfit {
+                Button { model.saveToWardrobe() } label: {
+                    Label(model.wardrobeSaving ? "正在存…" : (model.wardrobeSaved.map { "已存进衣橱：" + $0 } ?? "存进我的衣橱"), systemImage: "hanger")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(Theme.chip, in: Theme.buttonShape)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.wardrobeSaving || model.wardrobeSaved != nil)
+            }
             if model.aiResultOutfit || (model.aiGroup == .outfit && model.outfitPatch) {
                 Button { model.startOutfitPatch() } label: {
                     Label("有地方没换干净，涂抹补换", systemImage: "paintbrush")
