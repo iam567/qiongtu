@@ -80,7 +80,7 @@ struct OutfitPanel: View {
     /// 我的衣橱：把这张照片里的衣服存进来，或者点一身存好的来换。
     @ViewBuilder
     private var mineTiles: some View {
-        tile(model.wardrobeSaving ? "正在存…" : "存这身衣服", badge: nil) {
+        tile(model.wardrobeSaving ? "正在存…" : "存这身衣服", badge: "AI") {
             if model.wardrobeSaving {
                 ProgressView().tint(.white)
             } else {

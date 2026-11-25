@@ -87,7 +87,10 @@ final class EditorModel {
     var selectedOverlayID: UUID?
 
     // AI 修图
-    var aiGroup: AIPresetGroup = .fix
+    var aiGroup: AIPresetGroup = .fix {
+        // 在别的分组里涂过的，不带进换衣服。
+        didSet { if aiBrushLocked, !aiStrokes.isEmpty { clearAIRegion() } }
+    }
     var aiPrompt = ""
     var aiStrokes: [MosaicStroke] = []
     var aiBrush: CGFloat = 44
@@ -636,6 +639,11 @@ final class EditorModel {
         runOutfit(prompt: OutfitCatalog.patchPrompt, title: "补换")
     }
 
+    func leaveOutfitPatch() {
+        clearAIRegion()
+        outfitPatch = false
+    }
+
     /// 结果大体满意、只差一小块：先把结果定下来，再进补换。
     func startOutfitPatch() {
         guard !aiRunning, !isBusy else { return }
@@ -1038,7 +1046,7 @@ final class EditorModel {
     }
 
     /// 现有的步骤加上这次 AI 的步骤：拿下来的滤镜、调色排在它后面，浮在最上面的装饰不算在内。
-    private func aiStack(_ pending: [EditOp]) -> [EditOp] {
+    func aiStack(_ pending: [EditOp]) -> [EditOp] {
         let photo = liftedFloating.isEmpty ? ops : EditOp.splitFloating(ops).photo
         guard tool == .ai, !aiLift.isEmpty, !pending.isEmpty else { return photo + pending }
         return EditOp.splitColor(photo).base + pending + aiLift
@@ -1233,7 +1241,7 @@ final class EditorModel {
             return
         }
         if tool == .ai {
-            guard displayScale > 0, !aiRunning, !aiHasResult else { return }
+            guard displayScale > 0, !aiRunning, !aiHasResult, !aiBrushLocked else { return }
             let stroke = AIRegion.stroke(points: [point], width: aiBrush / displayScale, erase: aiErasing)
             aiStrokes.append(stroke)
             maskSet?.add(points: [point], stroke: stroke)
@@ -1264,7 +1272,7 @@ final class EditorModel {
             return
         }
         if tool == .ai {
-            guard !aiRunning, !aiHasResult, let last = aiStrokes.indices.last,
+            guard !aiRunning, !aiHasResult, !aiBrushLocked, let last = aiStrokes.indices.last,
                   let previous = aiStrokes[last].points.last else { return }
             aiStrokes[last].points.append(point)
             maskSet?.add(points: [previous, point], stroke: aiStrokes[last])
@@ -1355,6 +1363,9 @@ final class EditorModel {
     }
 
     // MARK: AI 修图
+
+    /// 换衣服挑款式时不能涂抹：误划一笔会变成只改那一块。要涂的在"补换"里。
+    private var aiBrushLocked: Bool { aiGroup == .outfit && !outfitPatch }
 
     var aiHasRegion: Bool { aiStrokes.contains { !$0.erase } }
 

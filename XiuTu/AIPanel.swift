@@ -165,7 +165,7 @@ struct AIPanel: View {
         VStack(spacing: 12) {
             brushRow
             HStack(spacing: 10) {
-                Button { model.outfitPatch = false } label: {
+                Button { model.leaveOutfitPatch() } label: {
                     Label("返回", systemImage: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white)
@@ -395,6 +395,7 @@ struct AIPanel: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .background(Theme.chip, in: Theme.buttonShape)
+                        .overlay(alignment: .topTrailing) { CornerBadge(text: "AI").offset(x: -6, y: -5) }
                 }
                 .buttonStyle(.plain)
                 .disabled(model.wardrobeSaving || model.wardrobeSaved != nil)

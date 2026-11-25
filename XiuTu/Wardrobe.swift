@@ -164,7 +164,7 @@ enum Wardrobe {
     /// 照着衣橱里的这身衣服换。
     static func prompt(_ item: WardrobeItem, skirt: OutfitSkirt) -> String {
         "把第一张图里主要人物的衣服换成参考图里的那一身。参考图（第二张起）是同一身衣服的全身和细节，头已经去掉，灰底只是背景。" +
-            (item.desc.isEmpty ? "" : "这身衣服的样子：\(item.desc)。") +
+            (item.desc.isEmpty ? "" : "这身衣服的样子：\(item.desc.hasSuffix("。") ? String(item.desc.dropLast()) : item.desc)。") +
             "必须和参考图是同一件：款式、颜色、面料、图案、刺绣、每一处装饰的样子和位置都一致，不要改设计、不要增减装饰。" +
             "这张照片里人的姿势、角度和参考图不同：衣服随姿势自然变化，参考图里看不到的部分（侧面、背面）按同一个设计合理延续；光线和明暗按第一张图的现场来，但衣服本身的颜色不变。" +
             "不要把参考图里的身材、姿势、灰色背景搬过来。" + skirt.prompt + OutfitCatalog.clean + OutfitCatalog.keep
@@ -177,9 +177,8 @@ extension EditorModel {
         guard !wardrobeSaving, let proxy else { return }
         wardrobeSaving = true
         aiError = nil
-        var ops = liftedFloating.isEmpty ? self.ops : EditOp.splitFloating(self.ops).photo
-        // 刚换好还没应用的也算。
-        if let edit = currentAIEdit { ops.append(.ai(edit)) }
+        // 刚换好还没应用的也算；拿下来的滤镜要盖在它上面。
+        let ops = aiStack(currentAIEdit.map { [.ai($0)] } ?? [])
         Task {
             defer { wardrobeSaving = false }
             let sent = ops
