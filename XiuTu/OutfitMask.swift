@@ -5,7 +5,7 @@ import CoreImage
 enum OutfitMask {
     /// 人在画面里的范围（归一化，左上原点），四周留出放裙摆和看清环境的余量。认不出人返回 nil。
     static func crop(_ image: CGImage) -> CGRect? {
-        guard let person = PersonSegmenter.mask(for: image) else { return nil }
+        guard let person = PersonSegmenter.main(PersonSegmenter.mask(for: image)) else { return nil }
         let w = 128, h = 128
         var px = [UInt8](repeating: 0, count: w * h)
         let ok = px.withUnsafeMutableBytes { raw -> Bool in
@@ -52,7 +52,7 @@ enum OutfitMask {
     /// area = 允许换的范围（新旧两个人合起来扩一圈；裙摆溢出画面时，胸口以下整片都允许）；
     /// core = 一定用 AI 的（新的人身上、下巴以下）。
     static func masks(original: CGImage, ai: CGImage, overflow: Bool, keepHead: Bool) -> (area: CGImage?, core: CGImage?) {
-        let before = PersonSegmenter.mask(for: original), after = PersonSegmenter.mask(for: ai)
+        let before = PersonSegmenter.main(PersonSegmenter.mask(for: original)), after = PersonSegmenter.main(PersonSegmenter.mask(for: ai))
         let size = CGSize(width: original.width, height: original.height)
         guard var area = ChangeKeep.personArea(before, after, size: size, grow: 12, blur: 5) else { return (nil, nil) }
         let faces = FaceDetector.detect(in: ai)

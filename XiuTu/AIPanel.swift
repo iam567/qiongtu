@@ -57,7 +57,6 @@ struct AIPanel: View {
 
     private let settings = AISettings.shared
     @State private var creativeKind: CreativeKind = .comic
-    @State private var masterGroup = MasterCatalog.groups.first ?? ""
 
     var body: some View {
         VStack(spacing: 10) {
@@ -121,9 +120,7 @@ struct AIPanel: View {
     /// 点一个功能就直接开始。需要补充内容的（比如"换背景"）先弹出输入框，写完自动开始。
     @ViewBuilder
     private var compose: some View {
-        if model.aiGroup == .master, let title = model.aiMasterPick, let master = MasterCatalog.byTitle[title] {
-            MasterCard(model: model, master: master) { start(AIPreset(title: master.title, prompt: master.prompt)) }
-        } else if model.aiGroup == .outfit {
+        if model.aiGroup == .outfit {
             if model.outfitPatch {
                 patch
             } else {
@@ -180,12 +177,10 @@ struct AIPanel: View {
                 }
             }
             if model.aiGroup == .master {
-                HScroll {
-                    HRow(spacing: 8) {
-                        ForEach(MasterCatalog.groups, id: \.self) { name in
-                            Chip(title: name, selected: masterGroup == name) { masterGroup = name }
-                        }
-                    }
+                HStack(spacing: 8) {
+                    Chip(title: "大师构图", symbol: "viewfinder", selected: model.aiMasterCompose) { model.aiMasterCompose = true }
+                    Chip(title: "原构图", symbol: "rectangle", selected: !model.aiMasterCompose) { model.aiMasterCompose = false }
+                    Spacer(minLength: 0)
                 }
             }
             if model.aiGroup == .compose {
@@ -209,9 +204,7 @@ struct AIPanel: View {
                             CreativeArtTile(title: preset.title, symbol: preset.symbol, kind: creativeKind) { start(preset) }
                         } else if master {
                             ImageTile(title: preset.title, image: model.masterThumbs[preset.title],
-                                      symbol: model.aiGroup.symbol, badge: "AI") {
-                                if model.aiGroup == .master { model.pickMaster(preset.title) } else { start(preset) }
-                            }
+                                      symbol: model.aiGroup.symbol, badge: "AI") { start(preset) }
                         } else if let tint = preset.tint {
                             ColorTile(hex: tint, title: preset.title) { start(preset) }
                         } else if model.aiGroup == .hairStyle {
@@ -232,7 +225,7 @@ struct AIPanel: View {
                 .padding(.bottom, 2)
             }
             .padding(.horizontal, -16)
-            .id(model.aiGroup == .creative ? "creative-" + creativeKind.rawValue : model.aiGroup.rawValue + (master ? masterGroup : ""))
+            .id(model.aiGroup == .creative ? "creative-" + creativeKind.rawValue : model.aiGroup.rawValue)
             brushRow
         }
         .task(id: model.aiGroup) {
@@ -257,7 +250,6 @@ struct AIPanel: View {
     private var presets: [AIPreset] {
         switch model.aiGroup {
         case .creative: return creativeKind.presets
-        case .master: return MasterCatalog.presets.filter { MasterCatalog.byTitle[$0.title]?.group == masterGroup }
         default: return model.aiGroup.presets
         }
     }
@@ -279,8 +271,7 @@ struct AIPanel: View {
         model.aiPresetTitle = preset.title
         model.aiFaceCrop = preset.faceCrop
         model.aiHairCrop = preset.hairCrop
-        // 大师"原构图"：只取 AI 的光影和颜色，细节全用原图，脸上不会有涂抹感。
-        model.aiToneOnly = preset.toneOnly || (model.aiGroup == .master && !(model.aiMasterCompose && model.aiMasterRedraw))
+        model.aiToneOnly = preset.toneOnly
         model.aiPart = preset.part
         if preset.prompt.hasSuffix("：") { editPrompt() } else { model.runAI() }
     }
@@ -327,13 +318,6 @@ struct AIPanel: View {
                 HStack(spacing: 8) {
                     Chip(title: "只取光影色彩", selected: model.aiToneOnly) { model.setAIToneOnly(true) }
                     Chip(title: "完整采用 AI 图", selected: !model.aiToneOnly) { model.setAIToneOnly(false) }
-                    Spacer()
-                }
-            }
-            if model.aiCrop != nil {
-                HStack(spacing: 8) {
-                    Chip(title: "按取景裁切", selected: model.aiCropOn) { model.setAICropOn(true) }
-                    Chip(title: "不裁切", selected: !model.aiCropOn) { model.setAICropOn(false) }
                     Spacer()
                 }
             }

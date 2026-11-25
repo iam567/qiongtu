@@ -13,7 +13,7 @@ enum MasterPreview {
     }
 
     /// 按 AIPresetGroup.master 里的名字对应。
-    static let looks: [String: FilmLook] = Dictionary([
+    static let looks: [String: FilmLook] = Dictionary(uniqueKeysWithValues: [
         make("滨田英明", bloom: 0.15) { c in
             c.exposure = 0.22; c.contrast = -0.25; c.shadows = 0.35; c.highlights = -0.1; c.saturation = -0.12
             c.temperature = -0.03; c.fade = 0.25
@@ -33,39 +33,39 @@ enum MasterPreview {
             c.temperature = 0.04; c.fade = 0.12; c.shadowTint = SIMD3(0.0, 0.006, 0.01)
         },
         make("森山大道", vignette: 0.3) { c in
-            c.mono = true; c.monoWeights = SIMD3(0.3, 0.5, 0.2); c.contrast = 0.9; c.shadows = -0.5; c.highlights = 0.2
+            c.contrast = 0.55; c.shadows = -0.35; c.highlights = 0.15; c.saturation = 0.15
         },
         make("何藩", vignette: 0.35) { c in
-            c.mono = true; c.contrast = 0.7; c.shadows = -0.6; c.highlights = 0.1; c.exposure = -0.1
+            c.contrast = 0.5; c.shadows = -0.45; c.temperature = 0.1; c.shadowTint = SIMD3(-0.02, 0.005, 0.02); c.highlightTint = SIMD3(0.04, 0.02, -0.02)
         },
         make("布列松") { c in
-            c.mono = true; c.contrast = 0.25; c.shadows = 0.05
+            c.contrast = 0.16; c.saturation = -0.18; c.shadows = 0.04
         },
         make("薇薇安·迈尔") { c in
-            c.mono = true; c.monoWeights = SIMD3(0.25, 0.6, 0.15); c.contrast = 0.15; c.fade = 0.12; c.shadows = 0.1
+            c.contrast = 0.14; c.saturation = 0.1; c.fade = 0.1; c.temperature = 0.06; c.highlightTint = SIMD3(0.02, 0.01, -0.015)
         },
         make("萨尔加多", vignette: 0.3) { c in
-            c.mono = true; c.monoWeights = SIMD3(0.5, 0.4, 0.1); c.contrast = 0.6; c.highlights = -0.3; c.shadows = -0.2
+            c.contrast = 0.4; c.saturation = -0.12; c.highlights = -0.25; c.shadows = -0.12; c.highlightTint = SIMD3(0.035, 0.02, -0.015)
         },
         make("安塞尔·亚当斯") { c in
-            c.mono = true; c.monoWeights = SIMD3(0.6, 0.35, 0.05); c.contrast = 0.5; c.highlights = -0.15; c.shadows = 0.1
+            c.contrast = 0.3; c.highlights = -0.15; c.shadows = 0.1; c.saturation = 0.08; c.vibrance = 0.2
         },
         make("莱博维茨", vignette: 0.35) { c in
             c.contrast = 0.3; c.saturation = -0.1; c.shadows = -0.2; c.temperature = 0.06
             c.shadowTint = SIMD3(0.0, 0.01, 0.02); c.highlightTint = SIMD3(0.025, 0.012, -0.01)
         },
         make("林德伯格", vignette: 0.15) { c in
-            c.mono = true; c.contrast = 0.2; c.fade = 0.08; c.highlights = -0.1
+            c.contrast = 0.1; c.saturation = -0.28; c.fade = 0.08; c.highlights = -0.08
         },
         make("阿维顿") { c in
-            c.mono = true; c.exposure = 0.2; c.contrast = 0.45; c.highlights = 0.3
+            c.exposure = 0.2; c.contrast = 0.22; c.saturation = -0.05; c.highlights = 0.2
         },
         make("欧文·佩恩", vignette: 0.2) { c in
             c.saturation = -0.55; c.contrast = 0.2; c.fade = 0.1; c.temperature = 0.03
             c.highlightTint = SIMD3(0.01, 0.008, 0.0)
         },
         make("牛顿") { c in
-            c.mono = true; c.contrast = 0.8; c.shadows = -0.3; c.highlights = 0.25
+            c.contrast = 0.5; c.shadows = -0.2; c.saturation = 0.1; c.highlights = 0.15
         },
         make("麦柯里", vignette: 0.2) { c in
             c.saturation = 0.3; c.vibrance = 0.25; c.contrast = 0.25; c.temperature = 0.08; c.shadows = -0.05
@@ -94,7 +94,7 @@ enum MasterPreview {
             c.exposure = 0.1; c.contrast = -0.05; c.saturation = 0.15; c.temperature = 0.1; c.tint = 0.06; c.fade = 0.18
             c.shadowTint = SIMD3(0.02, 0.0, 0.01); c.highlightTint = SIMD3(0.03, 0.015, 0.0)
         },
-    ] + MasterCatalog.looks + cameraLooks + lightLooks, uniquingKeysWith: { _, new in new })
+    ] + cameraLooks + lightLooks)
 
     /// 相机质感按钮上的小图：沿用本机"相机"滤镜里对应的色调（没有对应的就单独配一组）。
     private static let cameraLooks: [(String, FilmLook)] = {

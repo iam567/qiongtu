@@ -15,8 +15,6 @@ struct AIRecipe: Codable, Equatable {
     var strength: CGFloat = 1
     var toneOnly = false
     var soften: CGFloat = 0
-    /// 大师构图选的哪一种取景。
-    var masterFrame: String?
     /// 贴回原图的脸。
     var keepFace: Bool?
     /// 只在变了的地方用 AI 的像素。

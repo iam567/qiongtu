@@ -31,6 +31,53 @@ enum PersonSegmenter {
         }
         return found * 200 > w * h ? cg : nil
     }
+
+    /// 只留最大的一块和跟它差不多大的：建筑、花纹上零星误认成人的不要。
+    static func main(_ mask: CGImage?) -> CGImage? {
+        guard let mask else { return nil }
+        let w = 192, h = 192
+        var px = [UInt8](repeating: 0, count: w * h)
+        let ok = px.withUnsafeMutableBytes { raw -> Bool in
+            guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            ctx.draw(mask, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard ok else { return mask }
+        var label = [Int](repeating: 0, count: w * h), sizes = [0]
+        for start in 0..<(w * h) where px[start] > 70 && label[start] == 0 {
+            let id = sizes.count
+            sizes.append(0)
+            var stack = [start]
+            label[start] = id
+            while let i = stack.popLast() {
+                sizes[id] += 1
+                let x = i % w, y = i / w
+                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    let nx = x + dx, ny = y + dy
+                    guard nx >= 0, ny >= 0, nx < w, ny < h else { continue }
+                    let n = ny * w + nx
+                    if px[n] > 70, label[n] == 0 { label[n] = id; stack.append(n) }
+                }
+            }
+        }
+        guard let biggest = sizes.max(), biggest > 0 else { return mask }
+        // 往外扩两格，别把边缘的半透明切掉。
+        var keep = [UInt8](repeating: 0, count: w * h)
+        for y in 0..<h { for x in 0..<w {
+            let l = label[y * w + x]
+            guard l > 0, sizes[l] * 4 >= biggest else { continue }
+            for dy in -2...2 { for dx in -2...2 {
+                let nx = x + dx, ny = y + dy
+                if nx >= 0, ny >= 0, nx < w, ny < h { keep[ny * w + nx] = 255 }
+            } }
+        } }
+        guard let provider = CGDataProvider(data: Data(keep) as CFData),
+              let gate = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: w,
+                                 space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: 0), provider: provider,
+                                 decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { return mask }
+        return ChangeKeep.intersect(mask, gate) ?? mask
+    }
 }
 
 /// 手动美体（液化）里手指划过的一小段。坐标是归一化的图片坐标，半径以图片长边为 1。

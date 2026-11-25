@@ -228,16 +228,8 @@ struct EditorView: View {
                             model.runOutfit(prompt: OutfitCatalog.prompt(o, color: model.outfitColor, skirt: model.outfitSkirt), title: o.title)
                         }
                     }
-                    if let m = ProcessInfo.processInfo.environment["XIUTU_MASTER"] {
-                        model.pickMaster(m)
-                        // 接了模拟接口时自动点"开始生成"，测整条流程。
-                        if ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil, let preset = MasterCatalog.presets.first(where: { $0.title == m }) {
-                            model.aiMasterCompose = ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] == "compose"
-                            model.aiPrompt = preset.prompt
-                            model.aiPresetTitle = m
-                            model.aiToneOnly = !model.aiMasterCompose
-                            model.runAI()
-                        }
+                    if let m = ProcessInfo.processInfo.environment["XIUTU_MASTER"], let preset = AIPresetGroup.master.presets.first(where: { $0.title == m }) {
+                        model.startMaster(preset)
                     }
                 } else if name == "text+vertical" {
                     model.open(.text) {

@@ -72,7 +72,6 @@ extension EditorModel {
         guard tool == .ai else { return false }
         aiPresetTitle = r.presetTitle
         aiMasterCompose = r.masterCompose
-        aiMasterFrame = r.masterFrame
         aiFaceCrop = r.faceCrop
         aiHairCrop = r.hairCrop
         aiReframe = AIReframe(rawValue: r.reframe) ?? .original

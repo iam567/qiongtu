@@ -191,7 +191,30 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
                 AIPreset(title: "虚化背景", symbol: "drop", prompt: "保持人物清晰，把背景虚化成大光圈镜头的效果，过渡自然，发丝边缘不要出错。"),
             ]
         case .master:
-            return MasterCatalog.presets
+            return [
+                AIPreset(title: "滨田英明", prompt: "给这张照片做专业调色，风格是日系胶片人像的影调：通透柔和的自然光，低反差，略微提亮的空气感，淡淡的青绿色调，自然温暖的肤色。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "日系清新"),
+                AIPreset(title: "川内伦子", prompt: "给这张照片做专业调色，风格是明亮柔和的漫射光，浅淡的粉彩色，安静轻盈的氛围。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "柔光诗意"),
+                AIPreset(title: "蜷川实花", prompt: "给这张照片做专业调色，风格是高饱和的红、粉、蓝撞色，像花卉静物摄影一样鲜明浓郁的色彩。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "浓艳花色"),
+                AIPreset(title: "上田义彦", prompt: "给这张照片做专业调色，风格是安静克制的侧面窗光，柔和的暗部，低饱和，沉静的质感。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "静谧窗光"),
+                AIPreset(title: "森山大道", prompt: "给这张照片做专业调色，风格是高反差的浓郁彩色，暗部深重，街头快照般的粗粝感，不要加胶片颗粒。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "高反差街拍"),
+                AIPreset(title: "何藩", prompt: "给这张照片做专业调色，风格是强烈的明暗对比，大块的阴影和光束，几何感的构成，金黄的光对深青的影，老街头纪实的气质。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "光影几何"),
+                AIPreset(title: "布列松", prompt: "给这张照片做专业调色，风格是克制的彩色纪实，颜色自然、略低饱和，丰富的层次，自然的反差，干净克制。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "经典纪实"),
+                AIPreset(title: "薇薇安·迈尔", prompt: "给这张照片做专业调色，风格是中画幅彩色街头摄影，复古而饱满的颜色，细腻的层次，平实直接，略带怀旧。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "街头复古"),
+                AIPreset(title: "萨尔加多", prompt: "给这张照片做专业调色，风格是戏剧性的彩色，厚重的云层和逆光，颜色沉着，影调层次极其丰富。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "史诗光影"),
+                AIPreset(title: "安塞尔·亚当斯", prompt: "给这张照片做专业调色，风格是彩色风光，从深到亮的完整影调，极高的清晰度，天空和云层层次分明。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "壮丽风光"),
+                AIPreset(title: "莱博维茨", prompt: "给这张照片做专业调色，风格是有方向感的布光，立体的明暗，浓郁沉稳的色彩，油画般的质感。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "杂志大片"),
+                AIPreset(title: "林德伯格", prompt: "给这张照片做专业调色，风格是自然朴素的彩色人像，低饱和，柔和的自然光，电影剧照般的情绪，不要加胶片颗粒。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "电影感人像"),
+                AIPreset(title: "阿维顿", prompt: "给这张照片做专业调色，风格是直接清晰的彩色肖像，颜色干净准确，人物神态突出，背景处理成干净的浅色。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "极简肖像"),
+                AIPreset(title: "欧文·佩恩", prompt: "给这张照片做专业调色，风格是柔和而有雕塑感的光线，优雅克制的影棚肖像影调，背景处理成干净的灰色。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "优雅影棚"),
+                AIPreset(title: "牛顿", prompt: "给这张照片做专业调色，风格是高反差的彩色，硬光，利落有力的影调。画面保持彩色，不要变成黑白。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "硬光大片"),
+                AIPreset(title: "麦柯里", prompt: "给这张照片做专业调色，风格是饱满而有层次的色彩，眼神光清晰，主体从背景中分离出来。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "浓郁纪实"),
+                AIPreset(title: "索尔·雷特", prompt: "给这张照片做专业调色，风格是绘画感的色块，柔和的褪色调子，暖色点缀，带一点朦胧。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "街头彩色"),
+                AIPreset(title: "埃格尔斯顿", prompt: "给这张照片做专业调色，风格是染料转印般浓郁的颜色，尤其是红色，日常场景里的鲜明色彩。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "日常浓彩"),
+                AIPreset(title: "蒂姆·沃克", prompt: "给这张照片做专业调色，风格是童话绘本般的色调，柔和的粉彩和暖光，但不要改变场景里有什么。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "童话奇想"),
+                AIPreset(title: "王家卫", prompt: "给这张照片做专业调色，风格是港产老电影的色调：浓重的霓虹色，青绿和橙红对撞，暗部偏青，不要加胶片颗粒。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "港风电影"),
+                AIPreset(title: "岩井俊二", prompt: "给这张照片做专业调色，风格是日本老电影的影调：逆光，柔焦，泛白的高光，淡淡的青色和暖色，怀旧的空气感。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "逆光青春"),
+                AIPreset(title: "韦斯·安德森", prompt: "给这张照片做专业调色，风格是糖果般的粉彩配色，平整明亮的光线，复古而精致。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "对称粉彩"),
+            ]
         case .camera:
             return [
                 AIPreset(title: "徕卡 M", symbol: "camera", prompt: "这是一张手机拍的照片。把它处理成用徕卡 M 旁轴相机配 35mm f/1.4 镜头拍出来的样子：反差扎实、暗部深而有层次，颜色克制略偏暖，微反差高、主体立体，焦外柔和，四角有一点自然的暗角。去掉手机照片那种过度锐化、HDR 和涂抹感，景深、焦外和镜头的成像质感要像真的大底相机；不要加胶片颗粒。人物长相、姿势、服装和构图不变，结果仍然是一张真实的照片。"),
@@ -358,10 +381,6 @@ struct AIEdit {
     var core: CGImage? = nil
     /// AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。
     var shift: CGVector = .zero
-    /// 只取色彩时用的整图颜色表（大师、相机）：比局部跟光更自然，没有光晕。
-    var lut: Data? = nil
-    /// 最后再裁成这一块（归一化，左上原点）：大师构图从原图裁。
-    var cropAfter: CGRect? = nil
     /// AI 的结果是黑白的：只取光影时把颜色也去掉。
     var mono = false
     /// 这一步是怎么发起的（套用到新照片时再跑一遍）；涂抹、融合出来的没有。
@@ -390,15 +409,6 @@ struct AIEdit {
     }
 
     func apply(to image: CIImage) -> CIImage {
-        let out = edited(image)
-        guard let c = cropAfter else { return out }
-        let e = out.extent
-        let r = CGRect(x: e.minX + c.minX * e.width, y: e.maxY - c.maxY * e.height, width: c.width * e.width, height: c.height * e.height)
-            .integral.intersection(e)
-        return out.cropped(to: r).transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
-    }
-
-    private func edited(_ image: CIImage) -> CIImage {
         let extent = image.extent
         if reframed {
             // 长边和原图一样长，比例按 AI 给的。
@@ -426,7 +436,7 @@ struct AIEdit {
                                  core: core.map { AIRegion.scaled(mask: $0, to: extent, feather: false) })
         }
         if toneOnly {
-            r = lut.map { StyleLUT.apply($0, to: image, strength: 1) } ?? ToneTransfer.apply(original: image, graded: r)
+            r = ToneTransfer.apply(original: image, graded: r)
             if mono { r = r.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0]) }
             if let area {
                 r = r.applyingFilter("CIBlendWithMask", parameters: [
@@ -434,7 +444,7 @@ struct AIEdit {
                 ]).cropped(to: extent)
             }
         }
-        if !(toneOnly && lut != nil) { r = Self.softened(r, amount: soften) }
+        r = Self.softened(r, amount: soften)
         if !toneOnly { r = keepFaces(r, original: image) }
 
         var mask: CIImage?
