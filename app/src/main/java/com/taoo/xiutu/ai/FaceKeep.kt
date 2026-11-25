@@ -119,8 +119,11 @@ data class FaceKeep(
     }
 
     companion object {
-        /** original：发给 AI 之前的照片；result：AI 的结果。对不上的脸（转了头、换了表情、太小）不贴。在后台线程调用。 */
-        fun match(original: Bitmap, result: Bitmap): List<FaceKeep> {
+        /**
+         * original：发给 AI 之前的照片；result：AI 的结果。对不上的脸（转了头、换了表情、太小）不贴。
+         * forehead = false：额头不贴（换发型时刘海会变）。在后台线程调用。
+         */
+        fun match(original: Bitmap, result: Bitmap, forehead: Boolean = true): List<FaceKeep> {
             val from = FaceDetector.detect(original).filter { it.hasReliableLandmarks }
             if (from.isEmpty()) return emptyList()
             val to = FaceDetector.detect(result).filter { it.hasReliableLandmarks }
@@ -134,7 +137,7 @@ data class FaceKeep(
                 var best: Triple<Int, FaceKeep, Double>? = null
                 for ((i, source) in from.withIndex()) {
                     if (i in used || original.width * source.box.width() < 50) continue
-                    val (keep, error) = fit(source, su, face, du) ?: continue
+                    val (keep, error) = fit(source, su, face, du, forehead) ?: continue
                     if (best == null || error < best.third) best = Triple(i, keep, error)
                 }
                 best?.let {
@@ -153,7 +156,7 @@ data class FaceKeep(
 
         private fun scaled(p: List<PointF>, u: V2) = p.map { V2(it.x * u.x, it.y * u.y) }
 
-        private fun fit(s: FaceInfo, su: V2, d: FaceInfo, du: V2): Pair<FaceKeep, Double>? {
+        private fun fit(s: FaceInfo, su: V2, d: FaceInfo, du: V2, forehead: Boolean): Pair<FaceKeep, Double>? {
             val from = ArrayList<V2>()
             val to = ArrayList<V2>()
             // 两边都有、点数一样的五官才用（ML Kit 有时只给一个鼻尖点）。
@@ -165,7 +168,7 @@ data class FaceKeep(
             val width = d.box.width() * du.x
             val f = similarity(from, to, width) ?: return null
             val line = outline(
-                scaled(d.contour, du), scaled(d.leftEye + d.rightEye, du), scaled(d.leftBrow + d.rightBrow, du), scaled(d.outerLips, du),
+                scaled(d.contour, du), scaled(d.leftEye + d.rightEye, du), scaled(d.leftBrow + d.rightBrow, du), scaled(d.outerLips, du), forehead,
             ) ?: return null
             return FaceKeep(f.a, f.b, f.tx, f.ty, line, width) to f.error
         }
@@ -209,15 +212,18 @@ data class FaceKeep(
         }
 
         /** 脸的范围：下颌线往里收一点，上面盖到眉毛上方的额头，不碰到头发和背景。 */
-        internal fun outline(jaw: List<V2>, eyes: List<V2>, brows: List<V2>, lips: List<V2>): List<V2>? {
+        internal fun outline(jaw: List<V2>, eyes: List<V2>, brows: List<V2>, lips: List<V2>, forehead: Boolean = true): List<V2>? {
             if (jaw.size < 5 || eyes.isEmpty() || lips.isEmpty()) return null
             fun center(p: List<V2>) = V2(p.sumOf { it.x.toDouble() }.toFloat() / p.size, p.sumOf { it.y.toDouble() }.toFloat() / p.size)
             val up = center(eyes) - center(lips)
             // 眉毛往上推半个"眼到嘴"的距离，就是额头。
-            val top = brows.ifEmpty { eyes }.map { V2(it.x + up.x * 0.32f, it.y + up.y * 0.32f) } + brows
+            val lift = if (forehead) 0.32f else 0f
+            val top = brows.ifEmpty { eyes }.map { V2(it.x + up.x * lift, it.y + up.y * lift) } + brows
             val hull = convexHull(jaw + top)
             val c = center(hull)
-            return hull.map { V2(c.x + (it.x - c.x) * 0.93f, c.y + (it.y - c.y) * 0.93f) }
+            val kx = if (forehead) 0.93f else 0.82f
+            val ky = if (forehead) 0.93f else 0.86f
+            return hull.map { V2(c.x + (it.x - c.x) * kx, c.y + (it.y - c.y) * ky) }
         }
 
         internal fun convexHull(points: List<V2>): List<V2> {

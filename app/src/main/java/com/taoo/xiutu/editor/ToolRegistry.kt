@@ -15,6 +15,7 @@ import com.taoo.xiutu.tools.makeup.MakeupSession
 import com.taoo.xiutu.tools.mosaic.MosaicSession
 import com.taoo.xiutu.tools.overlay.OverlaySession
 import com.taoo.xiutu.tools.reshape.ReshapeSession
+import com.taoo.xiutu.tools.retouch.RetouchSession
 import com.taoo.xiutu.tools.shape.LiquifySession
 import com.taoo.xiutu.tools.shape.ShapeSession
 import com.taoo.xiutu.tools.skin.SkinSession
@@ -42,6 +43,7 @@ object ToolRegistry {
         Tool.EFFECT -> EffectSession(model)
         Tool.BODY_TONE -> BodyToneSession(model)
         Tool.SMART_CROP -> SmartCropSession(model)
+        Tool.RETOUCH -> RetouchSession(model)
     }
 
     fun available(t: Tool) = true

@@ -63,6 +63,7 @@ fun MainTab.entries(): List<MenuEntry> {
         MainTab.TOOLS -> listOf(
             MenuEntry(Tool.CROP), MenuEntry(Tool.FILTER), MenuEntry(Tool.ADJUST),
             MenuEntry("消除", "eraser", "AI", MenuAction.Erase),
+            MenuEntry(Tool.RETOUCH),
             MenuEntry(Tool.COLLAGE), MenuEntry(Tool.LAYERS),
         )
         MainTab.BEAUTY -> listOf(

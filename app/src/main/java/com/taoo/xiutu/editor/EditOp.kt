@@ -28,6 +28,7 @@ enum class Tool(val title: String, val symbol: String) {
     GRAPHIC("形状", "square.on.circle"),
     BODY_TONE("身体提亮", "sun.max"),
     SMART_CROP("智能构图", "viewfinder"),
+    RETOUCH("手动消除", "bandage"),
 }
 
 /**

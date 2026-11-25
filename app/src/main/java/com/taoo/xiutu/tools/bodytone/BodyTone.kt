@@ -92,8 +92,8 @@ data class BodyToneParams(
             m = g.blur(m, ml * 0.0022f * 2.5f)
         }
         val adds = strokes.any { !it.erase }
-        val feather = ml * 0.006f * 2.5f
-        fun strokeMask(list: List<MosaicStroke>): Tex? = AIRegion.maskImage(list, w, h)?.let { g.blur(g.upload(it), feather) }
+        val feather = ml * AIRegion.FEATHER * 2.5f
+        fun strokeMask(list: List<MosaicStroke>): Tex? = AIRegion.maskImage(AIRegion.grown(list, AIRegion.GROW), w, h)?.let { g.blur(g.upload(it), feather) }
         // 一笔一笔按先后来：后擦的擦掉先涂的，也擦掉自动选的。
         val painted = if (adds) strokeMask(strokes) else null
         // 擦除的范围要减掉"擦完以后又涂回来"的：把笔画反过来画一遍就是。

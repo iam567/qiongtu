@@ -48,6 +48,8 @@ class AIEdit(
     val area: Bitmap? = null,
     /** 换衣服：这一块一定用 AI 的（人身上、下巴以下，灰度图）。 */
     val core: Bitmap? = null,
+    /** 换发型：颜色按区域外面校正，变化看得更细（零碎的发丝也算变了）。 */
+    val outside: Boolean = false,
     /** AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。 */
     val shift: Pair<Float, Float> = 0f to 0f,
     /** AI 的结果是黑白的：只取光影时把颜色也去掉。 */
@@ -76,7 +78,8 @@ class AIEdit(
     private fun regionMask(w: Int, h: Int): Bitmap? = synchronized(this) {
         val key = w.toLong() shl 32 or h.toLong()
         maskCache?.let { if (it.first == key) return it.second }
-        val m = AIRegion.maskImage(strokes, w, h) ?: return null
+        // 羽化往外走：涂过的地方整块都是 AI 的，原来的东西不会半透明地透出来。
+        val m = AIRegion.maskImage(AIRegion.grown(strokes, AIRegion.GROW), w, h) ?: return null
         maskCache = key to m
         m
     }
@@ -129,7 +132,7 @@ class AIEdit(
                 if (mono) fg = MonoCheck.gray(this, fg)
                 if (areaTex != null) fg = ChangeKeep.blend(this, s, fg, areaTex)
             } else if (changedOnly) {
-                fg = ChangeKeep.apply(this, s, fg, areaTex, core?.let { upload(it) })
+                fg = ChangeKeep.apply(this, s, fg, areaTex, core?.let { upload(it) }, fine = outside)
             }
             if (soften > 0.005f) {
                 // 柔化按贴上去之后的大小算半径：先摆到整张画布上再模糊
@@ -152,9 +155,9 @@ class AIEdit(
                 sigma = min(e.width() * w, e.height() * h) * 0.08f
             } else if (mask != null) {
                 mode = 2
-                // 边缘羽化一点，接缝才不明显（σ = 长边 × 0.006，换算到蒙版像素）
+                // 边缘羽化一点，接缝才不明显（换算到蒙版像素）
                 val m = upload(mask)
-                val sig = max(w, h) * 0.006f * (mask.width.toFloat() / w)
+                val sig = max(w, h) * AIRegion.FEATHER * (mask.width.toFloat() / w)
                 maskTex = blur(m, sig * 2.5f)
             }
             val out = pass(
@@ -206,6 +209,14 @@ object AIRegion {
     /** AI 区域的笔画统一用这个样式，这样蒙版只有一张。 */
     fun stroke(points: List<PointF>, width: Float, erase: Boolean) =
         MosaicStroke(points.toMutableList(), width, erase, MosaicStyle.PIXEL, 1f)
+
+    /** 每一笔加粗多少、边缘羽化的 σ（都是占长边的比例）。 */
+    const val GROW = 0.012f
+    const val FEATHER = 0.0035f
+
+    /** 每一笔都加粗一点（占长边的比例）。 */
+    fun grown(strokes: List<MosaicStroke>, amount: Float): List<MosaicStroke> =
+        strokes.map { if (it.erase) it else MosaicStroke(it.points, it.width + amount, it.erase, it.style, it.strength) }
 
     /** 白 = 涂抹过的区域。 */
     fun maskImage(strokes: List<MosaicStroke>, width: Int, height: Int): Bitmap? {

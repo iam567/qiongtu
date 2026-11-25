@@ -446,7 +446,7 @@ object HairArt {
         }
     }
 
-    // MARK: 25 个发型
+    // MARK: 55 个发型
 
     /** 刘海 / 分缝这一组共用的中长发。 */
     private fun medium(s: Scene, fringe: Fringe, peak: Float = 0f) {
@@ -637,6 +637,206 @@ object HairArt {
             s.front += Piece(Path(), dark = mutableListOf(line))
         },
         "侧分" to { s -> medium(s, Fringe.Side(cx - 13), peak = 5f) },
+        // 下面 30 个
+        "层次长发" to { s ->
+            s.back reset mutableListOf(sheet(152f, spread = 2f))
+            s.front reset (listOf(cap(lift = 7.5f, fringe = Fringe.Curtain)) + locks(150f, spread = 3f, inner = 17f, end = End.TAPER, strands = 2)
+                + locks(112f, spread = 4f, bulge = 4f, inner = 22f, end = End.TAPER, strands = 1)).toMutableList()
+        },
+        "韩系大卷" to { s ->
+            s.back reset mutableListOf(sheet(156f, spread = 6f, amp = 4f, period = 36f))
+            s.front reset (listOf(cap(lift = 9f, side = 5f, puff = 4f, fringe = Fringe.Curtain))
+                + locks(158f, spread = 7f, bulge = 4f, amp = 5.5f, period = 36f, inner = 15f, strands = 3)).toMutableList()
+        },
+        "木马卷" to { s ->
+            s.back reset mutableListOf(sheet(150f, spread = 3f))
+            s.front reset mutableListOf(cap(lift = 7f, fringe = Fringe.Air(63f)))
+            for (x in listOf(-27f, -19f, 19f, 27f)) {
+                var y = 74f
+                while (y < 152) {
+                    s.front += curl(pt(cx + x, y), 6.4f, if (x > 0) 1f else 4f)
+                    y += 8
+                }
+            }
+        },
+        "蛋卷头" to { s ->
+            s.back reset mutableListOf(sheet(148f, spread = 7f, amp = 2.6f, period = 8f, grow = 0.2f))
+            s.front reset (listOf(cap(lift = 9f, side = 6f, puff = 5f, fringe = Fringe.Part(46f)))
+                + locks(150f, spread = 8f, bulge = 4f, amp = 2.8f, period = 8f, grow = 0.1f, inner = 15f, strands = 3)).toMutableList()
+        },
+        "螺旋卷" to { s ->
+            s.back reset mutableListOf(sheet(148f, spread = 3f))
+            s.front reset mutableListOf(cap(lift = 7f, peak = 3f, fringe = Fringe.Side(cx - 9)))
+            for (x in listOf(-30f, -22f, 22f, 30f)) {
+                s.front += tube((0..8).map { pt(cx + x + (if (it % 2 == 0) -3 else 3), 64 + it * 11f) }, strands = 1) { 8f }
+            }
+        },
+        "港风卷发" to { s ->
+            s.back reset mutableListOf(sheet(140f, spread = 10f, amp = 4f, period = 24f))
+            s.front reset (listOf(cap(lift = 13f, side = 7f, puff = 6f, peak = 5f, fringe = Fringe.Side(cx - 12)))
+                + locks(144f, spread = 10f, bulge = 6f, amp = 5f, period = 24f, inner = 16f, strands = 3)).toMutableList()
+        },
+        "复古手推波" to { s ->
+            s.back reset mutableListOf(sheet(92f, half = 27f))
+            val pieces = (listOf(cap(lift = 6f, side = 3f, peak = 5f, fringe = Fringe.Side(cx - 13)))
+                + locks(94f, spread = -3f, bulge = 4f, amp = 3.4f, period = 14f, grow = 0.1f, inner = 20f, curl = true, strands = 1)).toMutableList()
+            val bands = Piece(Path())
+            var y = 44f
+            while (y < 92) {
+                for (sgn in listOf(-1f, 1f)) {
+                    val band = Path()
+                    band.moveTo(pt(cx + sgn * 14, y + 2))
+                    band.quad(pt(cx + sgn * 30, y - 1), pt(cx + sgn * 23, y - 4))
+                    bands.shine += band to 2.6f
+                }
+                y += 11
+            }
+            pieces += bands
+            s.front reset pieces
+        },
+        "内扣长发" to { s ->
+            s.back reset mutableListOf(sheet(148f))
+            s.front reset (listOf(cap(fringe = Fringe.Part(46f))) + locks(150f, spread = 1f, bulge = 4f, inner = 14f, curl = true, strands = 3)).toMutableList()
+        },
+        "一刀切" to { s ->
+            s.back reset mutableListOf(sheet(128f, half = 32f))
+            s.front reset (listOf(cap(lift = 6.5f, fringe = Fringe.Part(46f))) + locks(128f, spread = 2f, bulge = 1f, inner = 13f, end = End.FLAT, strands = 3)).toMutableList()
+        },
+        "法式短发" to { s ->
+            s.back reset mutableListOf(sheet(95f, spread = 1f, half = 27f))
+            s.front reset (listOf(cap(lift = 8f, side = 5f, puff = 4f, fringe = Fringe.Air(62f)))
+                + locks(97f, spread = 0f, bulge = 5f, amp = 1.8f, period = 18f, inner = 19f, curl = true)).toMutableList()
+        },
+        "鲻鱼头" to { s ->
+            s.back reset mutableListOf(sheet(124f, half = 25f))
+            s.front reset mutableListOf(cap(lift = 9.5f, side = 4f, puff = 4f, fringe = Fringe.Choppy(60f, cx + 5), origin = cx + 5))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 25, 66f), pt(cx + sgn * 25, 96f), pt(cx + sgn * 24, 116f), pt(cx + sgn * 30, 128f)), strands = 1) { 9 * (1 - it * 0.75f) }
+            }
+        },
+        "水母头" to { s ->
+            s.back reset mutableListOf(sheet(168f, half = 22f))
+            s.front reset (listOf(cap(lift = 8.5f, side = 6f, puff = 5f, fringe = Fringe.Blunt(64f)))
+                + locks(92f, spread = 1f, bulge = 7f, inner = 19f, end = End.ROUND)).toMutableList()
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 25, 90f), pt(cx + sgn * 25, 130f), pt(cx + sgn * 24, 168f)), strands = 2) { 8 * (1 - it * 0.4f) }
+            }
+        },
+        "外翘短发" to { s ->
+            s.back reset mutableListOf(sheet(94f, half = 25f))
+            s.front reset (listOf(cap(lift = 7.5f, fringe = Fringe.Air(62f))) + locks(90f, spread = -3f, bulge = 2f, inner = 20f, strands = 1)).toMutableList()
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 25, 78f), pt(cx + sgn * 27, 92f), pt(cx + sgn * 37, 98f)), strands = 1) { 9 * (1 - it * 0.8f) }
+            }
+        },
+        "短卷发" to { s ->
+            val dice = Dice(23UL)
+            s.shift = 6f
+            s.back reset mutableListOf(Piece(Path().apply { addOval(RectF(cx - 33, 34f, cx + 33, 100f), Path.Direction.CW) }))
+            s.front reset mutableListOf(cap(lift = 9f, side = 5f, puff = 5f, end = 80f, fringe = Fringe.Wavy(57f)))
+            for (sgn in listOf(-1f, 1f)) {
+                for (y in stride(58f, 96f, 8f)) s.front += curl(pt(cx + sgn * (29 + dice.next() * 3), y), 7f, dice.next() * 6)
+            }
+            for (x in stride(-18f, 18f, 9f)) s.front += curl(pt(cx + x, 38 + abs(x) * 0.25f), 6f, dice.next() * 6)
+        },
+        "锁骨内扣" to { s ->
+            s.back reset mutableListOf(sheet(114f, spread = 1f))
+            s.front reset (listOf(cap(fringe = Fringe.Air(63f))) + locks(116f, spread = 1f, bulge = 4.5f, inner = 16f, curl = true)).toMutableList()
+        },
+        "低丸子头" to { s ->
+            pulledBack(s, Fringe.Part(46f))
+            s.back reset mutableListOf(curl(pt(cx + 4, 98f), 15f, 2f))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 21, 56f), pt(cx + sgn * 25, 74f), pt(cx + sgn * 22, 94f)), strands = 0) { 3 * (1 - it * 0.7f) }
+            }
+        },
+        "双丸子头" to { s ->
+            pulledBack(s, Fringe.Air(62f))
+            s.shift = 16f
+            s.back reset mutableListOf(curl(pt(cx - 21, 25f), 11f, 1f), curl(pt(cx + 21, 25f), 11f, 4f))
+        },
+        "半扎丸子" to { s ->
+            medium(s, Fringe.Part(46f))
+            s.shift = 14f
+            s.back += curl(pt(cx, 24f), 11f, 2.2f)
+        },
+        "公主头" to { s ->
+            medium(s, Fringe.Part(46f))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 10, 40f), pt(cx + sgn * 23, 48f), pt(cx + sgn * 30, 62f)), strands = 2) { 9 - 3 * it }
+            }
+            s.ties += RectF(cx - 33, 60f, cx - 27, 66f)
+            s.ties += RectF(cx + 27, 60f, cx + 33, 66f)
+        },
+        "侧马尾" to { s ->
+            pulledBack(s, Fringe.Side(cx + 10))
+            s.front += tube(listOf(pt(cx - 20, 88f), pt(cx - 28, 100f), pt(cx - 30, 126f), pt(cx - 26, 158f)), strands = 2) { t ->
+                (8 + 7 * sin(min(t * 2, 1f) * PIf / 2)) * (if (t > 0.75f) 1 - (t - 0.75f) / 0.25f * 0.75f else 1f)
+            }
+            s.ties += RectF(cx - 26, 89f, cx - 16, 95f)
+        },
+        "鱼骨辫" to { s ->
+            s.back reset mutableListOf(ribbon(Edge(cx - 22, cx - 12), Edge(cx + 24, cx + 22), 60f, 104f, End.FLAT, 0))
+            s.front reset mutableListOf(cap(lift = 6.5f, fringe = Fringe.Part(46f)))
+            s.front += ribbon(Edge(cx + 20, cx + 17), Edge(cx + 28, cx + 30, 2f), 60f, 94f, End.FLAT, 2)
+            s.front += braid(pt(cx + 24, 90f), pt(cx + 26, 148f), 18f, 11)
+            s.ties += RectF(cx + 21, 148f, cx + 31, 152.5f)
+        },
+        "双麻花辫" to { s ->
+            s.front reset mutableListOf(cap(lift = 6.5f, side = 3f, end = 78f, fringe = Fringe.Part(46f)))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += braid(pt(cx + sgn * 25, 76f), pt(cx + sgn * 29, 146f), 15f, 8)
+                s.ties += RectF(cx + sgn * 29 - 4.5f, 146f, cx + sgn * 29 + 4.5f, 150.5f)
+            }
+        },
+        "拳击辫" to { s ->
+            pulledBack(s, Fringe.Part(46f))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += braid(pt(cx + sgn * 9, 34f), pt(cx + sgn * 24, 70f), 11f, 5)
+                s.front += braid(pt(cx + sgn * 25, 78f), pt(cx + sgn * 27, 140f), 11f, 8)
+            }
+        },
+        "新娘盘发" to { s ->
+            pulledBack(s, Fringe.Side(cx - 9))
+            s.back reset mutableListOf(curl(pt(cx - 10, 96f), 11f, 1f), curl(pt(cx + 10, 96f), 11f, 3f), curl(pt(cx, 104f), 10f, 5f))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 22, 58f), pt(cx + sgn * 27, 70f), pt(cx + sgn * 23, 82f), pt(cx + sgn * 27, 94f), pt(cx + sgn * 24, 104f)), strands = 0) { 3.4f * (1 - it * 0.6f) }
+            }
+        },
+        "泡泡马尾" to { s ->
+            pulledBack(s)
+            s.shift = 16f
+            var y = 24f
+            for (i in 0 until 5) {
+                s.back += curl(pt(cx + 24 + i * 4, y + 6), 11f, i.toFloat())
+                s.ties += RectF(cx + 20 + i * 4, y - 5, cx + 28 + i * 4, y - 1)
+                y += 21
+            }
+        },
+        "脏辫" to { s ->
+            s.back reset mutableListOf(sheet(150f, spread = 1f))
+            s.front reset mutableListOf(cap(lift = 6f, fringe = Fringe.Open(46f)))
+            for (x in stride(-32f, 32f, 5.8f)) {
+                if (abs(x) > 17) s.front += braid(pt(cx + x * 0.86f, 58f), pt(cx + x, 152f), 6f, 13)
+            }
+        },
+        "法式刘海" to { s ->
+            medium(s, Fringe.Curtain)
+            s.front += tube(listOf(pt(cx - 3, 42f), pt(cx - 9, 54f), pt(cx - 11, 63f)), strands = 1) { 8 * (1 - it * 0.5f) }
+            s.front += tube(listOf(pt(cx + 3, 42f), pt(cx + 9, 54f), pt(cx + 11, 63f)), strands = 1) { 8 * (1 - it * 0.5f) }
+        },
+        "眉上刘海" to { s -> medium(s, Fringe.Blunt(55f)) },
+        "龙须刘海" to { s ->
+            medium(s, Fringe.Part(46f))
+            for (sgn in listOf(-1f, 1f)) {
+                s.front += tube(listOf(pt(cx + sgn * 2, 40f), pt(cx + sgn * 14, 54f), pt(cx + sgn * 17, 74f), pt(cx + sgn * 15, 92f)), strands = 0) { 3.2f * (1 - it * 0.6f) }
+            }
+        },
+        "大光明" to { s ->
+            s.ears = true
+            s.back reset mutableListOf(sheet(140f))
+            s.front reset mutableListOf(cap(lift = 8f, side = 2.5f, puff = 2f, end = 72f, fringe = Fringe.Open(42f), origin = cx))
+        },
         "寸头" to { s ->
             men(s)
             s.pale = true

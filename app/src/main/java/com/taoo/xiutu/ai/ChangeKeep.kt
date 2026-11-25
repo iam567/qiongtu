@@ -18,16 +18,16 @@ import kotlin.math.roundToInt
 object ChangeKeep {
     /**
      * original、ai 一样大。area：只允许在这一块里换（白 = 允许），不给就整张都可以。
-     * core：这一块一定用 AI 的（换衣服）。
+     * core：这一块一定用 AI 的（换衣服）。fine：变化看得更细，一两根飘着的发丝也算变了（换发型）。
      */
-    fun apply(g: GpuScope, original: Tex, ai: Tex, area: Tex?, core: Tex? = null): Tex {
+    fun apply(g: GpuScope, original: Tex, ai: Tex, area: Tex?, core: Tex? = null, fine: Boolean = false): Tex {
         val w = original.width
         val h = original.height
         val long = max(w, h).toFloat()
         // AI 常把整张的明暗颜色带偏一点：先按大范围拉回原图的样子，再比较、再贴。
-        val toned = if (core != null && area != null) tonedByOutside(g, ai, original, area)
+        val toned = if ((core != null || fine) && area != null) tonedByOutside(g, ai, original, area)
         else ToneTransfer.apply(g, ai, original, radius = long * 0.05f)
-        val sigma = long * 0.0028f
+        val sigma = long * (if (fine) 0.0016f else 0.0028f)
         // 蒙版本来就要羽化：在最长 1600 的小图上算，预览和导出一致，也快。
         val k = min(1f, MASK_SIDE / long)
         val mw = max(1, (w * k).roundToInt())
@@ -35,11 +35,11 @@ object ChangeKeep {
         val ml = long * k
         val bo = g.blur(original, sigma * 2.5f)
         val bt = g.blur(toned, sigma * 2.5f)
-        val diff = g.pass(DIFF, mapOf("src" to bo, "fg" to bt), width = mw, height = mh)
+        val diff = g.pass(if (fine) DIFF_FINE else DIFF, mapOf("src" to bo, "fg" to bt), width = mw, height = mh)
         if (bo !== original) g.release(bo)
         if (bt !== toned) g.release(bt)
         // 去掉零星的小点，再往外扩一点、羽化，接缝落在没变的地方。
-        var mask = morphology(g, diff, ml * 0.0012f, grow = false)
+        var mask = if (fine) diff else morphology(g, diff, ml * 0.0012f, grow = false)
         mask = morphology(g, mask, ml * 0.009f, grow = true)
         mask = g.blur(mask, ml * 0.005f * 2.5f)
         if (core != null) mask = g.pass(MAX, mapOf("src" to mask, "fg" to core), width = mw, height = mh)
@@ -84,6 +84,17 @@ void main() {
     vec3 d = abs(toLin(texture(src, uv).rgb) - toLin(texture(fg, uv).rgb));
     float v = max(d.r, max(d.g, d.b));
     float m = smoothstep(0.045, 0.12, v);
+    o = vec4(m, m, m, 1.0);
+}
+"""
+
+    private const val DIFF_FINE = Shaders.HEADER + """
+uniform sampler2D src;
+uniform sampler2D fg;
+void main() {
+    vec3 d = abs(texture(src, uv).rgb - texture(fg, uv).rgb);
+    float v = max(d.r, max(d.g, d.b));
+    float m = smoothstep(0.03, 0.08, v);
     o = vec4(m, m, m, 1.0);
 }
 """

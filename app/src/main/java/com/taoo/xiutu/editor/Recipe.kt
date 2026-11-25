@@ -30,6 +30,7 @@ import com.taoo.xiutu.tools.makeup.MakeupParams
 import com.taoo.xiutu.tools.mosaic.MosaicOp
 import com.taoo.xiutu.tools.overlay.OverlayOp
 import com.taoo.xiutu.tools.reshape.ReshapeParams
+import com.taoo.xiutu.tools.retouch.RetouchOp
 import com.taoo.xiutu.tools.shape.LiquifyOp
 import com.taoo.xiutu.tools.shape.ShapeOp
 import com.taoo.xiutu.tools.skin.SkinOp
@@ -199,6 +200,7 @@ data class EditRecipe(val steps: List<RecipeStep>) {
             is SkinOp -> skipped("皮肤", "drop")
             is ReshapeParams -> skipped("面部重塑", "face.dashed")
             is ShapeOp -> skipped("美体", "figure.stand")
+            is RetouchOp -> skipped("手动消除", "bandage")
             is BodyToneOp -> skipped("身体提亮", "sun.max")
             is LayerStack -> skipped("图层", "square.3.layers.3d")
             is CollageOp -> skipped("拼图", "square.grid.2x2")

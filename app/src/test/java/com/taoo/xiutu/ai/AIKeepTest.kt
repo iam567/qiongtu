@@ -224,4 +224,27 @@ class AIKeepTest {
         val b = Wardrobe.bounds(Mask8(ByteArray(160 * 160) { if (it % 160 in 40..79 && it / 160 in 16..143) -1 else 0 }, 160, 160))!!
         assertEquals(0.25f, b[0], 1e-5f); assertEquals(0.1f, b[1], 1e-5f); assertEquals(0.5f, b[2], 1e-5f); assertEquals(0.9f, b[3], 1e-5f)
     }
+
+    @Test fun hair() {
+        assertEquals(50, AIPresetGroup.HAIR_STYLE.presets.size)
+        assertEquals(50, AIPresetGroup.HAIR_STYLE.presets.map { it.title }.toSet().size)
+        assertTrue(AIPresetGroup.HAIR_STYLE.presets.all { it.hairCrop })
+        // 脸在中间偏上：往下到膝盖上面、两边留出飘开的头发
+        val b = OutfitMask.hairBox(0.46f, 0.2f, 0.54f, 0.28f, 3000f, 2000f)!!
+        assertEquals(0.2f - 0.12f * 1.6f, b[1], 1e-4f)
+        assertEquals(1f, b[3], 1e-4f)
+        assertTrue(b[0] < 0.3f && b[2] > 0.7f)
+        // 脸很大：几乎整张，不裁
+        assertNull(OutfitMask.hairBox(0.3f, 0.2f, 0.7f, 0.6f, 2000f, 3000f))
+        // 额头不贴：范围明显变小，不到眉毛上面
+        val jaw = listOf(V2(0.3f, 0.5f), V2(0.35f, 0.65f), V2(0.5f, 0.75f), V2(0.65f, 0.65f), V2(0.7f, 0.5f))
+        val eyes = listOf(V2(0.42f, 0.5f), V2(0.58f, 0.5f))
+        val brows = listOf(V2(0.4f, 0.45f), V2(0.6f, 0.45f))
+        val lips = listOf(V2(0.45f, 0.66f), V2(0.55f, 0.66f))
+        val full = FaceKeep.outline(jaw, eyes, brows, lips)!!
+        val low = FaceKeep.outline(jaw, eyes, brows, lips, forehead = false)!!
+        assertTrue(low.minOf { it.y } > full.minOf { it.y } + 0.03f)
+        assertTrue(low.maxOf { it.x } < full.maxOf { it.x } - 0.01f)
+        assertTrue("不能留下轮廓、残影" in AIIntent.HAND_PROMPT)
+    }
 }

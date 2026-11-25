@@ -65,6 +65,64 @@ object OutfitMask {
         return if ((r - l) * (b - t) > 0.72f) null else floatArrayOf(l, t, r, b)
     }
 
+    /** 换发型要发出去的范围：头顶往上留一些，往下到膝盖上面，两边把飘开的头发也包进来。认不出人就发整张。 */
+    fun hairCrop(image: Bitmap): RectF? {
+        val found = PersonSegmenter.maskData(Img.downscale(image, 1024)) ?: return null
+        val iw = image.width.toFloat()
+        val ih = image.height.toFloat()
+        val person = crop(Mask8.resized(PersonSegmenter.main(found), 128, 128), iw, ih) ?: RectF(0f, 0f, 1f, 1f)
+        val f = FaceDetector.detect(image).maxByOrNull { it.box.width() }
+            ?: return if (person.width() * person.height() > 0.72f) null else person
+        return hairBox(f.box.left, f.box.top, f.box.right, f.box.bottom, iw, ih)?.let { RectF(it[0], it[1], it[2], it[3]) }
+    }
+
+    /** 按脸框算，左、上、右、下；几乎整张时返回 null。 */
+    internal fun hairBox(left: Float, top: Float, right: Float, bottom: Float, iw: Float, ih: Float): FloatArray? {
+        val fw = right - left
+        val fh = bottom - top
+        val mid = (left + right) / 2
+        val h = max(fh, fw * iw / ih)
+        val half = max(h * ih / iw * 4, fw * 4)
+        var l = max(mid - half, 0f)
+        var r = min(mid + half, 1f)
+        val t = max(top - h * 1.6f, 0f)
+        val b = min(bottom + h * 6, 1f)
+        if ((b - t) * ih > (r - l) * iw * 2.2f) {
+            val add = ((b - t) * ih / 2.2f / iw - (r - l)) / 2
+            l = max(l - add, 0f)
+            r = min(r + add, 1f)
+        }
+        return if ((r - l) * (b - t) > 0.72f) null else floatArrayOf(l, t, r, b)
+    }
+
+    /** 换发型允许换的范围：人和周围一大圈（飘开的发丝），不出发出去的那一块，也只到腰下。 */
+    fun hairArea(original: Bitmap, ai: Bitmap, crop: RectF?): Mask8? {
+        val face = FaceDetector.detect(original).maxByOrNull { it.box.width() }
+        // 往外扩多少跟着脸的大小走：发丝能飘出去一个多头宽。
+        val unit = face?.let {
+            max(it.box.width() * original.width, it.box.height() * original.height) / max(original.width, original.height) * 640
+        } ?: 40f
+        val near = ChangeKeep.personArea(
+            person(original), person(ai), original.width, original.height, grow = (unit * 1.2f).coerceIn(24f, 90f).roundToInt(), blur = 6f,
+        ) ?: return null
+        val w = near.w
+        val h = near.h
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        canvas.drawColor(Color.BLACK)
+        // 离发出去那一块的边近的不用，接缝不露；贴着照片边的那一边不用缩。
+        val c = crop ?: RectF(0f, 0f, 1f, 1f)
+        val inset = if (crop == null) 0f else w * 0.015f
+        val x0 = c.left * w + (if (c.left > 0.002f) inset else 0f)
+        val x1 = c.right * w - (if (c.right < 0.998f) inset else 0f)
+        val y0 = c.top * h + (if (c.top > 0.002f) inset else 0f)
+        val y1 = c.bottom * h - (if (c.bottom < 0.998f) inset else 0f)
+        canvas.drawRect(x0, y0, max(x1, x0 + 1), max(y1, y0 + 1), Paint().apply { color = Color.WHITE })
+        val gate = Mask8.grayOf(bmp)
+        Mask8.gaussian(gate, max(inset * 0.6f, 1f))
+        return ChangeKeep.intersect(near, gate)
+    }
+
     /** 把裁出来那一块的结果拼回整张图（按结果的清晰度，长边最多 5120，也不超过 GPU 的上限）。 */
     fun paste(piece: Bitmap, crop: RectF, base: Bitmap): Bitmap {
         val limit = min(5120, Gpu.run { Gpu.maxTextureSize })

@@ -445,6 +445,8 @@ private val SYMBOLS: Map<String, ImageVector> = mapOf(
     "bubble.left.fill" to Icons.Filled.ChatBubble,
     // 历史图库
     "list.number" to Icons.Filled.FormatListNumbered,
+    // 手动消除
+    "clock.arrow.circlepath" to Icons.Filled.History,
     // 换衣服
     "tshirt" to Icons.Filled.Checkroom,
     // 统一风格
