@@ -3,6 +3,7 @@ package com.taoo.xiutu.editor
 import com.taoo.xiutu.ai.AISession
 import com.taoo.xiutu.tools.adjust.AdjustSession
 import com.taoo.xiutu.tools.beauty.BeautySession
+import com.taoo.xiutu.tools.bodytone.BodyToneSession
 import com.taoo.xiutu.tools.collage.CollageSession
 import com.taoo.xiutu.tools.effect.EffectSession
 import com.taoo.xiutu.tools.crop.CropSession
@@ -17,6 +18,7 @@ import com.taoo.xiutu.tools.reshape.ReshapeSession
 import com.taoo.xiutu.tools.shape.LiquifySession
 import com.taoo.xiutu.tools.shape.ShapeSession
 import com.taoo.xiutu.tools.skin.SkinSession
+import com.taoo.xiutu.tools.smartcrop.SmartCropSession
 
 /** 工具 → 会话。 */
 object ToolRegistry {
@@ -38,6 +40,8 @@ object ToolRegistry {
         Tool.DOODLE, Tool.MARK -> DoodleSession(model, t)
         Tool.FRAME, Tool.BACKDROP -> FrameSession(model, t)
         Tool.EFFECT -> EffectSession(model)
+        Tool.BODY_TONE -> BodyToneSession(model)
+        Tool.SMART_CROP -> SmartCropSession(model)
     }
 
     fun available(t: Tool) = true

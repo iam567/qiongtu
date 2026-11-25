@@ -2,6 +2,7 @@ package com.taoo.xiutu.tools.shape
 
 import android.graphics.Bitmap
 import com.taoo.xiutu.ai.AIPreset
+import com.taoo.xiutu.ai.BodyPart
 import com.taoo.xiutu.editor.EditOp
 import kotlin.math.abs
 import kotlin.math.cos
@@ -249,6 +250,17 @@ enum class ShapeItem(val title: String, val symbol: String, val group: ShapeGrou
     AI_FULL_HIP("丰臀", "oval.portrait", ShapeGroup.HIP, true),
     AI_LIFT_HIP("提臀", "oval.portrait", ShapeGroup.HIP, true);
 
+    /** AI 版只该动的那一块；手臂、全身、体态这些范围散的不限制（仍然只在人身上）。 */
+    val part: BodyPart?
+        get() = when (this) {
+            AI_CHEST, AI_CHEST_NATURAL, AI_CHEST_LIFT -> BodyPart.CHEST
+            AI_WAIST, AI_BELLY, AI_TUMMY -> BodyPart.WAIST
+            AI_HIPS, AI_WAIST_HIP, AI_FULL_HIP, AI_LIFT_HIP -> BodyPart.HIP
+            AI_SWAN_NECK, AI_SQUARE_SHOULDER, AI_THIN_NECK, AI_LONG_NECK, AI_TRAPEZIUS, AI_WIDE_SHOULDER, AI_NARROW_SHOULDER -> BodyPart.NECK
+            AI_LEG, AI_THIGH, AI_CALF, AI_STRAIGHT_LEG -> BodyPart.LEGS
+            else -> null
+        }
+
     /** 能不能分别调画面左边和右边。 */
     val hasSides: Boolean
         get() = when (this) {
@@ -350,7 +362,11 @@ enum class ShapeMode(val key: String, val title: String) {
 
 /** 一键美体和塑形里交给 AI 做的那几项。 */
 object ShapeAI {
-    private const val KEEP = "人物长相、发型、姿势、服装的款式和颜色、背景都不变，结果仍然是一张真实的照片。"
+    private const val KEEP = "人物长相、发型、姿势、服装的款式和颜色、背景都不变，画面不要移动、裁切或缩放；皮肤保留毛孔和真实质感，不磨皮、不涂抹。结果仍然是一张真实的照片。"
+
+    /** 只动一个部位时的限制：AI 常顺手把别处也改了（衣服变短、多出肚脐、换了手的样子）。 */
+    private const val ONLY = "只改上面说的部位，其余部位和原照片完全一样：不要让衣服变短、变紧或多露出皮肤，" +
+        "不要凭空画出肚脐、腹肌线、锁骨线、纹身、首饰或新的褶皱，手、头发、腰腹和背景都不动。"
 
     fun preset(item: ShapeItem): AIPreset? {
         val prompt = when (item) {
@@ -389,7 +405,12 @@ object ShapeAI {
         val tail = if (item.group == ShapeGroup.POSTURE) {
             "人物长相、发型、服装的款式和颜色、背景都不变；除了上面说的体态，其余姿势不变。结果仍然是一张真实的照片。"
         } else KEEP
-        return AIPreset(title = item.title, symbol = item.symbol, prompt = prompt + tail)
+        val only = when (item.part) {
+            null -> ""
+            BodyPart.WAIST -> ONLY.replace("手、头发、腰腹和背景都不动", "手、头发和背景都不动")
+            else -> ONLY
+        }
+        return AIPreset(title = item.title, symbol = item.symbol, prompt = prompt + only + tail, part = item.part)
     }
 
     /** 一键美体里的 AI 预设。 */
@@ -446,6 +467,7 @@ data class ShapeParams(
 
 /** 历史里的一步美体塑形。 */
 class ShapeOp(val params: ShapeParams) : EditOp {
+    override val skipsColor: Boolean get() = true
     override fun apply(src: Bitmap): Bitmap = params.apply(src)
     // 和 iOS 一样：塑形会挪动画面内容（增高还改画布大小），之前的文字贴纸等不能再单独合并改。
     override val changesCanvas: Boolean get() = true

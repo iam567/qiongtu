@@ -162,5 +162,6 @@ class LiquifyParams(
 
 /** 历史里的一步手动美体。 */
 class LiquifyOp(val params: LiquifyParams) : EditOp {
+    override val skipsColor: Boolean get() = true
     override fun apply(src: Bitmap): Bitmap = params.apply(src)
 }

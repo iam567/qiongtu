@@ -37,6 +37,8 @@ class ReshapeParams(
     /** 变形还原涂过的地方。 */
     val restore: List<ReshapeRestoreStroke> = emptyList(),
 ) : EditOp {
+    override val skipsColor: Boolean get() = true
+
     val isIdentity: Boolean get() = faces.all { it.isIdentity }
 
     override fun apply(src: Bitmap): Bitmap = apply(src, null)

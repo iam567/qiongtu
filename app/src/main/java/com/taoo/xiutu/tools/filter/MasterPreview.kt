@@ -160,7 +160,7 @@ object MasterPreview {
                 shadowTint = V3(0.02f, 0.0f, 0.01f); highlightTint = V3(0.03f, 0.015f, 0.0f)
             },
     
-    ) + cameraLooks + lightLooks).toMap()
+    ) + com.taoo.xiutu.ai.MasterCatalog.looks + cameraLooks + lightLooks).toMap()
 
     /** 缩略图：居中裁成 68:84、长边 260，套上每个标题对应的色调。在后台线程调。 */
     fun thumbs(base: Bitmap, titles: Collection<String>): Map<String, Bitmap> {

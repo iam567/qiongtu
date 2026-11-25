@@ -40,6 +40,16 @@ class AIEdit(
     val soften: Float = 0f,
     /** 这一步是怎么发起的（套用到新照片时再跑一遍）；涂抹、融合出来的没有。 */
     val recipe: AIRecipe? = null,
+    /** 贴回原图的脸（整张重画的结果用）。 */
+    val faces: List<FaceKeep> = emptyList(),
+    /** 只在真正变了的地方用 AI 的像素（美体、去路人这类只动一部分的）。 */
+    val changedOnly: Boolean = false,
+    /** changedOnly 允许换的范围（人和周围一圈，灰度图，白 = 允许）；null = 整张。 */
+    val area: Bitmap? = null,
+    /** AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。 */
+    val shift: Pair<Float, Float> = 0f to 0f,
+    /** AI 的结果是黑白的：只取光影时把颜色也去掉。 */
+    val mono: Boolean = false,
 ) : EditOp {
     val strokes: List<MosaicStroke> = strokes.map { it.copy() }
 
@@ -69,6 +79,12 @@ class AIEdit(
         m
     }
 
+    private fun keepFaces(g: GpuScope, out: Tex, original: Tex): Tex {
+        if (faces.isEmpty()) return out
+        val pasted = faces.fold(out) { t, face -> face.apply(g, t, original) }
+        return if (mono) MonoCheck.gray(g, pasted) else pasted
+    }
+
     override fun apply(src: Bitmap): Bitmap {
         val w = src.width
         val h = src.height
@@ -78,8 +94,11 @@ class AIEdit(
             val ow = (result.width * k).roundToInt().coerceAtLeast(1)
             val oh = (result.height * k).roundToInt().coerceAtLeast(1)
             val out = if (k < 1f) Img.scaled(Img.downscale(result, max(ow, oh)), ow, oh) else Img.scaled(result, ow, oh)
-            if (soften <= 0.005f) return out
-            return Gpu.run { read(softened(this, upload(out), soften, max(ow, oh).toFloat())) }
+            if (soften <= 0.005f && faces.isEmpty()) return out
+            return Gpu.run {
+                val soft = softened(this, upload(out), soften, max(ow, oh).toFloat())
+                read(if (faces.isEmpty()) soft else keepFaces(this, soft, upload(src)))
+            }
         }
         // 结果贴到哪一块（像素，原点左上）
         val t = frame?.let { floatArrayOf(it.left * w, it.top * h, it.width() * w, it.height() * h) }
@@ -93,20 +112,32 @@ class AIEdit(
             val s = upload(src)
             val r = upload(result)
             var fg = r
+            val full = floatArrayOf(0f, 0f, w.toFloat(), h.toFloat())
             var place = t
+            val (sx, sy) = shift
+            if (toneOnly || changedOnly || faces.isNotEmpty() || sx != 0f || sy != 0f) {
+                // 整体偏了就挪回来，边上露出来的地方延伸边缘像素
+                val rect = floatArrayOf(t[0] + sx * w, t[1] + sy * h, t[2], t[3])
+                fg = pass(AIShaders.PLACE, mapOf("res" to r), mapOf("rect" to rect), w, h)
+                place = full
+            }
+            val areaTex = if (toneOnly || changedOnly) area?.let { upload(it) } else null
             if (toneOnly) {
-                val placed = pass(AIShaders.PLACE, mapOf("res" to r), mapOf("rect" to t), w, h)
-                fg = ToneTransfer.apply(this, s, placed)
-                place = floatArrayOf(0f, 0f, w.toFloat(), h.toFloat())
+                fg = ToneTransfer.apply(this, s, fg)
+                if (mono) fg = MonoCheck.gray(this, fg)
+                if (areaTex != null) fg = ChangeKeep.blend(this, s, fg, areaTex)
+            } else if (changedOnly) {
+                fg = ChangeKeep.apply(this, s, fg, areaTex)
             }
             if (soften > 0.005f) {
                 // 柔化按贴上去之后的大小算半径：先摆到整张画布上再模糊
                 if (fg === r) {
                     fg = pass(AIShaders.PLACE, mapOf("res" to r), mapOf("rect" to t), w, h)
-                    place = floatArrayOf(0f, 0f, w.toFloat(), h.toFloat())
+                    place = full
                 }
                 fg = softened(this, fg, soften, max(t[2], t[3]))
             }
+            if (!toneOnly) fg = keepFaces(this, fg, s)
             var mode = 0
             var maskTex = s
             val ell = FloatArray(4)
@@ -161,7 +192,10 @@ object ToneTransfer {
         val radius = (radius ?: (max(original.width, original.height) * 0.012f)) * 2.5f
         val bo = g.blur(original, radius)
         val br = g.blur(graded, radius)
-        return g.pass(AIShaders.TONE_GAIN, mapOf("src" to original, "bo" to bo, "br" to br), width = original.width, height = original.height)
+        val out = g.pass(AIShaders.TONE_GAIN, mapOf("src" to original, "bo" to bo, "br" to br), width = original.width, height = original.height)
+        if (bo !== original) g.release(bo)
+        if (br !== graded) g.release(br)
+        return out
     }
 }
 
@@ -187,7 +221,7 @@ object AIRegion {
 }
 
 internal object AIShaders {
-    private const val LINEAR = """
+    const val LINEAR = """
 vec3 toLin(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 vec3 toSrgb(vec3 c) { c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
 """

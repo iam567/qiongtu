@@ -226,6 +226,7 @@ data class FaceMakeup(
 
 /** 美妆：按人脸关键点画口红、眉毛、眼妆、修容、腮红，作为编辑历史里的一步。全部在本机完成。 */
 data class MakeupParams(val faces: List<FaceMakeup> = emptyList()) : EditOp {
+    override val skipsColor: Boolean get() = true
     val isIdentity: Boolean get() = faces.all { it.isEmpty || !it.face.hasReliableLandmarks }
 
     override fun apply(src: Bitmap): Bitmap {

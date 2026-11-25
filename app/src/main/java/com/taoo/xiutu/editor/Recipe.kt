@@ -9,6 +9,7 @@ import com.taoo.xiutu.tools.adjust.AdjustKey
 import com.taoo.xiutu.tools.adjust.AdjustOp
 import com.taoo.xiutu.tools.adjust.AdjustParams
 import com.taoo.xiutu.tools.beauty.BeautyParams
+import com.taoo.xiutu.tools.bodytone.BodyToneOp
 import com.taoo.xiutu.tools.collage.CollageOp
 import com.taoo.xiutu.tools.crop.CropOp
 import com.taoo.xiutu.tools.crop.CropParams
@@ -58,6 +59,12 @@ data class AIRecipe(
     val strength: Float = 1f,
     val toneOnly: Boolean = false,
     val soften: Float = 0f,
+    /** 大师构图选的哪一种取景。 */
+    val masterFrame: String? = null,
+    /** 贴回原图的脸。 */
+    val keepFace: Boolean? = null,
+    /** 只在变了的地方用 AI 的像素。 */
+    val changedOnly: Boolean? = null,
 )
 
 /** 能套到新照片上的一步。 */
@@ -194,6 +201,7 @@ data class EditRecipe(val steps: List<RecipeStep>) {
             is SkinOp -> skipped("皮肤", "drop")
             is ReshapeParams -> skipped("面部重塑", "face.dashed")
             is ShapeOp -> skipped("美体", "figure.stand")
+            is BodyToneOp -> skipped("身体提亮", "sun.max")
             is LayerStack -> skipped("图层", "square.3.layers.3d")
             is CollageOp -> skipped("拼图", "square.grid.2x2")
             else -> skipped("其他", "photo")

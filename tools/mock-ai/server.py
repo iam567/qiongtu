@@ -386,6 +386,8 @@ class Handler(BaseHTTPRequestHandler):
             if "multipart/form-data" in ctype:
                 return self.openai_multipart(provider, raw, ctype)
             body = json.loads(raw or b"{}")
+            if path.endswith("/chat/completions"):
+                return self.look(provider, body)
             if provider == "gemini" or path.endswith("/interactions"):
                 return self.gemini(body)
             if provider == "qwen" or "/services/aigc/" in path:
@@ -413,6 +415,34 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": {"message": "Your request was rejected by the safety system.", "code": "moderation_blocked",
                                            "moderation_details": {"moderation_stage": "input", "categories": ["sexual"]}}})
         return True
+
+    CROPS = [
+        {"title": "左上安静", "how": "留白", "why": "大片留白里有一个重心", "box": [40, 60, 520, 470]},
+        {"title": "中间特写", "how": "居中", "why": "细节清楚，背景干净", "box": [380, 350, 640, 680]},
+        {"title": "横幅全景", "how": "三分法", "why": "视线从左走到右", "box": [0, 420, 1000, 960]},
+        {"title": "竖幅", "how": "引导线", "why": "线条往上走", "box": [560, 40, 900, 720]},
+        {"title": "方形", "how": "对称", "why": "左右平衡", "box": [200, 200, 800, 800]},
+        {"title": "重复的框", "how": "对称", "why": "应该被去重", "box": [205, 205, 800, 800]},
+    ]
+
+    def look_text(self, prompt):
+        """看图的回答：智能构图要 crops，找脸要 faces。"""
+        if "faces" in prompt:
+            data = {"faces": [{"box": [420, 180, 560, 360]}]}
+        else:
+            data = {"crops": self.CROPS}
+        return "<think>先看看 {画面}</think>\n```json\n" + json.dumps(data, ensure_ascii=False) + "\n```"
+
+    def look(self, provider, body):
+        """看图回文字（智能构图）：夹一段思考和代码块，测 App 的解析。第一个型号假装没有，测换型号。"""
+        parts = body["messages"][0]["content"]
+        prompt = next(p["text"] for p in parts if p["type"] == "text")
+        has_image = any(p["type"] == "image_url" and p["image_url"]["url"].startswith("data:image/jpeg;base64,") for p in parts)
+        self.log(provider, f"[看图 {body.get('model')} 图={has_image}] " + prompt[:400])
+        if body.get("model") == "gpt-6.1-terra":
+            return self.send_json(404, {"error": {"message": "The model `gpt-6.1-terra` does not exist", "code": "model_not_found"}})
+        self.send_json(200, {"choices": [{"message": {"role": "assistant", "content": self.look_text(prompt)}}],
+                             "usage": {"prompt_tokens": 2310, "completion_tokens": 640, "total_tokens": 2950}})
 
     def openai_multipart(self, provider, raw, ctype):
         fields, files = parse_multipart(raw, ctype)
@@ -494,6 +524,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         images = [from_data_uri(b.get("data")) for b in blocks if isinstance(b, dict) and b.get("type") == "image"]
         images = [i for i in images if i]
+        model = body.get("model") or ""
+        if images and "image" not in model and ("flash" in model or "lite" in model):
+            # 能看图的文字型号：只回文字
+            return self.send_json(200, {"id": uuid.uuid4().hex, "status": "completed", "steps": [
+                {"type": "thought", "content": [{"type": "text", "text": "Looking at the photo."}]},
+                {"type": "model_output", "content": [{"type": "text", "text": self.look_text(prompt)}]}],
+                "usage": {"total_input_tokens": 2310, "total_output_tokens": 640, "total_thought_tokens": 120}})
         if not images:
             # 只有文字：照 Gemini 的习惯回一段话、不给图
             return self.send_json(200, {"id": uuid.uuid4().hex, "steps": [{"type": "model_output", "content": [

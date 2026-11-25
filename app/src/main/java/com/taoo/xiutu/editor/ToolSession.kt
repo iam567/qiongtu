@@ -28,6 +28,9 @@ abstract class ToolSession(val model: EditorModel, val tool: Tool) {
      */
     open fun replacementOps(): List<EditOp>? = null
 
+    /** 这次先从历史末尾拿下来的滤镜和调色（AI 修图）：确认时排在新步骤后面，盖回最上面。 */
+    open val liftedColor: List<EditOp> get() = emptyList()
+
     /** 还在处理中（比如 AI 正在生成）：这时点确认不生效。 */
     open val busy: Boolean get() = false
 

@@ -249,5 +249,6 @@ class FilmLook(
 
 /** 滤镜确认后的一步。 */
 class LookOp(val id: String, val intensity: Float) : EditOp {
+    override val colors: Boolean get() = true
     override fun apply(src: Bitmap): Bitmap = FilmLook.byID[id]?.apply(src, intensity) ?: src
 }

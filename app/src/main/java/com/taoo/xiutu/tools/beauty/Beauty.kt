@@ -77,6 +77,8 @@ data class BeautyParams(
     val values: Map<BeautyKey, Float> = emptyMap(),
     val lipColor: Int = 0,
 ) : EditOp {
+    override val skipsColor: Boolean get() = true
+
     operator fun get(key: BeautyKey): Float = values[key] ?: 0f
 
     /** 改一项：<= 0 等于去掉，最大 1。 */

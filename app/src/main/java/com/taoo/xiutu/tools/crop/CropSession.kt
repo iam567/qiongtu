@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -20,6 +21,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -120,28 +122,7 @@ class CropSession(model: EditorModel) : ToolSession(model, Tool.CROP) {
             val imgNow by rememberUpdatedState(img)
 
             Canvas(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val box = imgNow
-                        val s = crop.rect
-                        val f = Rect(box.left + s.x * box.width, box.top + s.y * box.height, box.left + s.maxX * box.width, box.top + s.maxY * box.height)
-                        val locked = lockedAspect
-                        val handle = hitTest(down.position, f, locked == null, px) ?: return@awaitEachGesture
-                        down.consume()
-                        while (true) {
-                            val e = awaitPointerEvent()
-                            val c = e.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!c.pressed) break
-                            if (box.width > 0 && box.height > 0) {
-                                val dx = (c.position.x - down.position.x) / box.width
-                                val dy = (c.position.y - down.position.y) / box.height
-                                crop = crop.copy(rect = updated(handle, s, dx, dy, locked))
-                            }
-                            c.consume()
-                        }
-                    }
-                },
+                Modifier.fillMaxSize().cropDrag({ imgNow }, { crop.rect }, { lockedAspect }) { crop = crop.copy(rect = it) },
             ) {
                 if (bmp != null) {
                     drawImage(
@@ -149,34 +130,7 @@ class CropSession(model: EditorModel) : ToolSession(model, Tool.CROP) {
                         dstSize = IntSize(fw.roundToInt(), fh.roundToInt()), filterQuality = FilterQuality.High,
                     )
                 }
-                // 框外压暗
-                val dim = Path().apply {
-                    fillType = PathFillType.EvenOdd
-                    addRect(img)
-                    addRect(frame)
-                }
-                drawPath(dim, Color.Black.copy(alpha = 0.6f))
-                // 三分线
-                val grid = Color.White.copy(alpha = 0.45f)
-                for (i in 1..2) {
-                    val x = frame.left + frame.width * i / 3
-                    val y = frame.top + frame.height * i / 3
-                    drawLine(grid, Offset(x, frame.top), Offset(x, frame.bottom), 0.5f * px)
-                    drawLine(grid, Offset(frame.left, y), Offset(frame.right, y), 0.5f * px)
-                }
-                drawRect(Color.White, frame.topLeft, frame.size, style = Stroke(1f * px))
-                // 四个角
-                val l = minOf(22f * px, frame.width / 3, frame.height / 3)
-                val corners = Path()
-                for ((c, sx, sy) in listOf(
-                    Triple(frame.topLeft, 1f, 1f), Triple(frame.topRight, -1f, 1f),
-                    Triple(frame.bottomLeft, 1f, -1f), Triple(frame.bottomRight, -1f, -1f),
-                )) {
-                    corners.moveTo(c.x + sx * l, c.y)
-                    corners.lineTo(c.x, c.y)
-                    corners.lineTo(c.x, c.y + sy * l)
-                }
-                drawPath(corners, Color.White, style = Stroke(3.5f * px, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawCropFrame(img, frame, px)
             }
         }
     }
@@ -201,6 +155,68 @@ class CropSession(model: EditorModel) : ToolSession(model, Tool.CROP) {
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (a in CropAspect.entries) Chip(a.title, aspect == a) { chooseAspect(a) }
+            }
+        }
+    }
+}
+
+/** 裁剪框：框外压暗、三分线、边框和四个角。px = 1dp 的像素数。 */
+internal fun DrawScope.drawCropFrame(img: Rect, frame: Rect, px: Float) {
+    // 框外压暗
+    val dim = Path().apply {
+        fillType = PathFillType.EvenOdd
+        addRect(img)
+        addRect(frame)
+    }
+    drawPath(dim, Color.Black.copy(alpha = 0.6f))
+    // 三分线
+    val grid = Color.White.copy(alpha = 0.45f)
+    for (i in 1..2) {
+        val x = frame.left + frame.width * i / 3
+        val y = frame.top + frame.height * i / 3
+        drawLine(grid, Offset(x, frame.top), Offset(x, frame.bottom), 0.5f * px)
+        drawLine(grid, Offset(frame.left, y), Offset(frame.right, y), 0.5f * px)
+    }
+    drawRect(Color.White, frame.topLeft, frame.size, style = Stroke(1f * px))
+    // 四个角
+    val l = minOf(22f * px, frame.width / 3, frame.height / 3)
+    val corners = Path()
+    for ((c, sx, sy) in listOf(
+        Triple(frame.topLeft, 1f, 1f), Triple(frame.topRight, -1f, 1f),
+        Triple(frame.bottomLeft, 1f, -1f), Triple(frame.bottomRight, -1f, -1f),
+    )) {
+        corners.moveTo(c.x + sx * l, c.y)
+        corners.lineTo(c.x, c.y)
+        corners.lineTo(c.x, c.y + sy * l)
+    }
+    drawPath(corners, Color.White, style = Stroke(3.5f * px, cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+/** 拖裁剪框的手势。box = 图片在画布里的位置，rect = 现在的框（null = 没有框可拖），locked = 锁定的归一化宽高比。 */
+internal fun Modifier.cropDrag(box: () -> Rect, rect: () -> CropRect?, locked: () -> Float?, onChange: (CropRect) -> Unit): Modifier = composed {
+    val boxNow by rememberUpdatedState(box)
+    val rectNow by rememberUpdatedState(rect)
+    val lockedNow by rememberUpdatedState(locked)
+    val changeNow by rememberUpdatedState(onChange)
+    pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val b = boxNow()
+            val s = rectNow() ?: return@awaitEachGesture
+            val f = Rect(b.left + s.x * b.width, b.top + s.y * b.height, b.left + s.maxX * b.width, b.top + s.maxY * b.height)
+            val aspect = lockedNow()
+            val handle = hitTest(down.position, f, aspect == null, density) ?: return@awaitEachGesture
+            down.consume()
+            while (true) {
+                val e = awaitPointerEvent()
+                val c = e.changes.firstOrNull { it.id == down.id } ?: break
+                if (!c.pressed) break
+                if (b.width > 0 && b.height > 0) {
+                    val dx = (c.position.x - down.position.x) / b.width
+                    val dy = (c.position.y - down.position.y) / b.height
+                    changeNow(updated(handle, s, dx, dy, aspect))
+                }
+                c.consume()
             }
         }
     }

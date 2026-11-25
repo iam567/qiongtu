@@ -165,5 +165,7 @@ data class AdjustParams(
 
 /** 调色确认后的一步。 */
 class AdjustOp(val params: AdjustParams) : EditOp {
+    /** 带局部调色的和位置绑在一起，不能拿下来。 */
+    override val colors: Boolean get() = !params.localChanged
     override fun apply(src: Bitmap): Bitmap = AdjustRender.apply(src, params)
 }

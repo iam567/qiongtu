@@ -124,6 +124,9 @@ class Mask8(val pixels: ByteArray, val w: Int, val h: Int) {
             for (i in buf.indices) m.pixels[i] = buf[i].coerceIn(0, 255).toByte()
         }
 
+        /** 同上，按标准差给（四次方框模糊合起来 σ ≈ 0.577 × 半径）。原地修改。 */
+        fun gaussian(m: Mask8, sigma: Float) = blur(m, max(1f, sigma * 1.732f - 1f))
+
         private fun boxPass(buf: IntArray, w: Int, h: Int, r: Int, horizontal: Boolean, tmp: IntArray) {
             val n = if (horizontal) w else h
             val lines = if (horizontal) h else w
