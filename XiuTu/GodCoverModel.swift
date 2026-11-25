@@ -156,9 +156,9 @@ final class GodCoverModel {
         image.jpegData(compressionQuality: quality).map { "data:image/jpeg;base64," + $0.base64EncodedString() }
     }
 
-    func load(assetID: String) async {
-        guard let asset = PhotoLibrary.asset(id: assetID), let data = await PhotoLibrary.data(for: asset),
-              let image = UIImage(data: data) else {
+    /// fileURL：Mac 上从文件来的照片；没有就按 assetID 从相册取。
+    func load(assetID: String, fileURL: URL? = nil) async {
+        guard let image = await PhotoLibrary.image(assetID: assetID, fileURL: fileURL) else {
             errorText = "无法读取这张图片"
             isLoading = false
             return
@@ -306,7 +306,8 @@ final class GodCoverModel {
 
     // MARK: 保存
 
-    func save() async -> Bool {
+    /// 现在这张封面的图片数据。
+    func exportData() async -> Data? {
         var data: Data?
         if showTemplate {
             data = try? await engine.export(params, scale: 3)
@@ -314,7 +315,11 @@ final class GodCoverModel {
             let image = showingAI && hasAI ? aiImage : original
             data = image?.jpegData(compressionQuality: 0.95)
         }
-        guard let data else { return false }
+        return data
+    }
+
+    func save() async -> Bool {
+        guard let data = await exportData() else { return false }
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)

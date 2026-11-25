@@ -181,6 +181,7 @@ struct ResultViewer: View {
     let image: UIImage
     var onClose: () -> Void
     @State private var note: String?
+    @State private var exports: [MacExport] = []
 
     var body: some View {
         ZStack {
@@ -198,12 +199,16 @@ struct ResultViewer: View {
                     }
                     Spacer()
                     Button {
+                        if Platform.isMac {
+                            exports = [MacExport(image, name: "穷图", source: "AI 生成")].compactMap { $0 }
+                            return
+                        }
                         Task {
                             let ok = await AIOneShot.saveToPhotos(image)
                             note = ok ? "已保存到相册" : "保存失败"
                         }
                     } label: {
-                        Text(note ?? "保存")
+                        Text(note ?? (Platform.isMac ? "导出" : "保存"))
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.black)
                             .padding(.horizontal, 18)
@@ -214,6 +219,8 @@ struct ResultViewer: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
+            .padding(.top, Platform.isMac ? 44 : 0)
         }
+        .macExport($exports) { _ in note = "已导出" }
     }
 }

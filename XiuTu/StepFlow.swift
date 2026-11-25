@@ -50,7 +50,7 @@ struct StepBar<Step: Identifiable & Equatable>: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 }
 
@@ -72,7 +72,7 @@ struct StepFooter: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(Theme.chip, in: Capsule())
+                        .background(Theme.chip, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
             }
@@ -85,7 +85,7 @@ struct StepFooter: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 46)
-                    .background(canAdvance ? Theme.accent : Theme.accent.opacity(0.35), in: Capsule())
+                    .background(canAdvance ? Theme.accent : Theme.accent.opacity(0.35), in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canAdvance)
@@ -95,6 +95,6 @@ struct StepFooter: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 10)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 }

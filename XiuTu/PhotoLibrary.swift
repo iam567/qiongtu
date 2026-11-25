@@ -136,3 +136,19 @@ struct AssetThumb: View {
         }
     }
 }
+
+extension PhotoLibrary {
+    /// 读一张照片：有文件就读文件（Mac），没有就从相册取。
+    static func image(assetID: String, fileURL: URL?) async -> UIImage? {
+        if let fileURL {
+            let data = await Task.detached(priority: .userInitiated) { () -> Data? in
+                let scoped = fileURL.startAccessingSecurityScopedResource()
+                defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
+                return try? Data(contentsOf: fileURL)
+            }.value
+            return data.flatMap { UIImage(data: $0) }
+        }
+        guard let asset = asset(id: assetID), let data = await data(for: asset) else { return nil }
+        return UIImage(data: data)
+    }
+}

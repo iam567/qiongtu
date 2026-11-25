@@ -332,8 +332,8 @@ struct TileRow<Item: Identifiable, Tile: View>: View {
     @ViewBuilder var tile: (Item) -> Tile
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+        HScroll {
+            HRow(spacing: 8) {
                 ForEach(items) { tile($0) }
             }
             .padding(.vertical, 2)
@@ -350,8 +350,8 @@ struct SymbolChipRow<Item: Identifiable>: View {
     let onTap: (Item) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+        HScroll {
+            HRow(spacing: 8) {
                 ForEach(items) { item in
                     Chip(title: title(item), symbol: symbol(item), selected: isSelected(item)) { onTap(item) }
                 }

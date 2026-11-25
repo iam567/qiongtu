@@ -32,11 +32,15 @@ struct CharacterDetailView: View {
         ZStack {
             Theme.bg.ignoresSafeArea()
             if let character {
-                VStack(spacing: 0) {
-                    topBar(character).frame(height: 52)
-                    content(character).frame(maxWidth: .infinity, maxHeight: .infinity)
-                    panel(character)
-                    BottomTabBar(tabs: Page.allCases, title: { $0.title }, selection: $page)
+                if Platform.isMac {
+                    macLayout(character)
+                } else {
+                    VStack(spacing: 0) {
+                        topBar(character).frame(height: 52)
+                        content(character).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        panel(character)
+                        BottomTabBar(tabs: Page.allCases, title: { $0.title }, selection: $page)
+                    }
                 }
             }
             if let viewing {
@@ -58,6 +62,24 @@ struct CharacterDetailView: View {
             Text("立绘和三视图都会从角色库里删掉，不能恢复。")
         }
         .onDisappear { task?.cancel() }
+    }
+
+    private func macLayout(_ character: MangaCharacter) -> some View {
+        MacWorkbench(title: character.name, onClose: onClose) {
+            MacIconButton(symbol: "trash", help: "删除角色") { confirmDelete = true }
+                .disabled(running)
+        } canvas: {
+            content(character)
+        } header: {
+            SegmentBar(items: Page.allCases, selected: page, title: { $0.title }) { page = $0 }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+        } panel: {
+            panel(character)
+        } footer: {
+            EmptyView()
+        }
+        .ignoresSafeArea()
     }
 
     private func topBar(_ character: MangaCharacter) -> some View {
@@ -147,7 +169,7 @@ struct CharacterDetailView: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(Theme.accent, in: Capsule())
+                            .background(Theme.accent, in: Theme.buttonShape)
                     }
                     .buttonStyle(.plain)
                     Button { toggleCast(character) } label: {
@@ -155,7 +177,7 @@ struct CharacterDetailView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 104, height: 44)
-                            .background(Theme.chip, in: Capsule())
+                            .background(Theme.chip, in: Theme.buttonShape)
                     }
                     .buttonStyle(.plain)
                 }
@@ -170,7 +192,7 @@ struct CharacterDetailView: View {
         .padding(.top, 12)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     private func makeSheet() {

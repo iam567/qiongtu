@@ -8,7 +8,7 @@ final class MacSession {
 
     /// 打开文件面板是为了什么。
     enum Purpose: Equatable {
-        case open, raw, stitch, recipe(UUID)
+        case open, raw, stitch, cover, studio, recipe(UUID)
 
         var types: [UTType] {
             switch self {
@@ -26,6 +26,12 @@ final class MacSession {
     var editorDirty = false
     /// 从 Finder 打开、还没处理的文件。
     var incoming: [URL] = []
+    /// 拖进漫画人生、满意脸型的图片，由那一页自己取走。
+    var dropped: [URL] = []
+    /// 菜单栏里点了漫画人生 / 满意脸型。
+    var page: Page?
+
+    enum Page { case manga, faces }
 
     private init() {}
 }
@@ -38,10 +44,15 @@ struct MacRootView: View {
         case stitch(AutoStitchJob, id: UUID)
         case raw(name: String, data: Data, id: UUID)
         case history
+        case cover(URL, id: UUID)
+        case studio(URL, id: UUID)
+        case manga
+        case faces
+        case draft
 
         var isEditing: Bool {
             switch self {
-            case .editor, .stitch, .raw: return true
+            case .editor, .stitch, .raw, .cover, .studio, .manga, .draft: return true
             default: return false
             }
         }
@@ -50,6 +61,9 @@ struct MacRootView: View {
     @State private var screen: Screen = .start
     @State private var dropping = false
     @State private var pending: [URL]?
+    @State private var pendingPurpose: MacSession.Purpose = .open
+    @State private var askDraft = false
+    @State private var draftChecked = false
     @State private var busy = false
     @State private var note: String?
     @State private var showSettings = false
@@ -98,7 +112,7 @@ struct MacRootView: View {
                 let urls = pending ?? []
                 pending = nil
                 session.editorDirty = false
-                perform(urls, purpose: .open)
+                perform(urls, purpose: pendingPurpose)
             }
             Button("继续编辑", role: .cancel) {}
         }
@@ -106,7 +120,19 @@ struct MacRootView: View {
             Button("好", role: .cancel) {}
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
-        .onAppear(perform: configureWindow)
+        .onAppear {
+            configureWindow()
+            checkDraft()
+        }
+        .onChange(of: session.page) {
+            guard let page = session.page else { return }
+            session.page = nil
+            show(page)
+        }
+        .alert("上次有一张图还没编辑完", isPresented: $askDraft) {
+            Button("接着编辑", role: .cancel) { screen = .draft }
+            Button("不要了", role: .destructive) { DraftStore.shared.clear() }
+        }
         // Finder 里"打开方式"、拖到程序坞图标上。
         // Finder 里"打开方式"、拖到程序坞图标上：MacSceneDelegate 收到后放进 session.incoming。
         .onChange(of: session.incoming, initial: true) {
@@ -132,6 +158,7 @@ struct MacRootView: View {
             MacStartView(onOpen: { session.importing = $0 },
                          onRecent: { url in screen = .editor(url, recipe: nil, id: UUID()) },
                          onHistory: { screen = .history },
+                         onPage: { show($0) },
                          onSettings: { showSettings = true })
         case .editor(let url, let recipe, let id):
             EditorView(assetID: "", fileURL: url, recipeID: recipe, initialTool: nil) { close() }
@@ -152,6 +179,36 @@ struct MacRootView: View {
                             onClose: close)
             }
             .background(Theme.bg)
+        case .cover(let url, let id):
+            GodCoverView(fileURL: url, onClose: close).id(id)
+        case .studio(let url, let id):
+            StudioView(fileURL: url, onClose: close).id(id)
+        case .manga:
+            MangaView(onClose: close)
+        case .faces:
+            FavoriteFaceView(onClose: close)
+        case .draft:
+            EditorView(assetID: "", restoreDraft: true, initialTool: nil) { close() }
+        }
+    }
+
+    /// 打开漫画人生、满意脸型。有没导出的修改时先不跳，免得丢掉。
+    private func show(_ page: MacSession.Page) {
+        if screen.isEditing, session.editorDirty {
+            note = "先把现在这张导出，或者返回放弃修改"
+            return
+        }
+        screen = page == .manga ? .manga : .faces
+    }
+
+    /// 启动时看看草稿箱：上次编辑到一半退出了，就问要不要接着编辑。从 Finder 打开文件进来的不问。
+    private func checkDraft() {
+        guard !draftChecked else { return }
+        draftChecked = true
+        Task {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard case .start = screen, session.incoming.isEmpty, DraftStore.shared.exists else { return }
+            askDraft = true
         }
     }
 
@@ -164,7 +221,7 @@ struct MacRootView: View {
 
     /// 拖进来的东西变成文件。Mac Catalyst 里从 Finder 拖文件给的不是路径，而是"图片文件的内容"，
     /// 要用 loadInPlaceFileRepresentation 取；能原地读就用原文件，不能就先复制一份到临时目录（回调结束后系统会删掉它给的临时文件）。
-    private static func urls(from providers: [NSItemProvider]) async -> [URL] {
+    static func urls(from providers: [NSItemProvider]) async -> [URL] {
         var urls: [URL] = []
         for provider in providers {
             if let url = await url(from: provider) { urls.append(url) }
@@ -235,7 +292,32 @@ struct MacRootView: View {
             if !urls.isEmpty { note = "打不开这个文件" }
             return
         }
-        if screen.isEditing, session.editorDirty, case .open = purpose {
+        var purpose = purpose
+        #if DEBUG
+        // 调试用：XIUTU_SCREEN=cover / studio / manga / faces 打开的文件直接进那一页，方便截图检查。
+        if case .start = screen, purpose == .open {
+            switch ProcessInfo.processInfo.environment["XIUTU_SCREEN"] {
+            case "cover": purpose = .cover
+            case "studio": purpose = .studio
+            case "manga": screen = .manga
+            case "faces": screen = .faces
+            default: break
+            }
+        }
+        #endif
+        // 正开着封神、摄影棚、漫画人生、满意脸型时，拖进来的图就给这一页用。
+        if purpose == .open {
+            switch screen {
+            case .cover: purpose = .cover
+            case .studio: purpose = .studio
+            case .manga, .faces:
+                session.dropped = files
+                return
+            default: break
+            }
+        }
+        if screen.isEditing, session.editorDirty {
+            pendingPurpose = purpose
             pending = files
             return
         }
@@ -246,6 +328,14 @@ struct MacRootView: View {
     private func perform(_ files: [URL], purpose: MacSession.Purpose) {
         if case .recipe(let id) = purpose, let url = files.first {
             screen = .editor(url, recipe: id, id: UUID())
+            return
+        }
+        if purpose == .cover, let url = files.first {
+            screen = .cover(url, id: UUID())
+            return
+        }
+        if purpose == .studio, let url = files.first {
+            screen = .studio(url, id: UUID())
             return
         }
         let raws = files.filter(Self.isRaw)
@@ -297,6 +387,7 @@ struct MacStartView: View {
     var onOpen: (MacSession.Purpose) -> Void
     var onRecent: (URL) -> Void
     var onHistory: () -> Void
+    var onPage: (MacSession.Page) -> Void
     var onSettings: () -> Void
 
     private let history = HistoryStore.shared
@@ -334,7 +425,12 @@ struct MacStartView: View {
             sideButton("RAW 冲洗…", symbol: "camera.aperture") { onOpen(.raw) }
             sideButton("拼接截图…", symbol: "rectangle.stack") { onOpen(.stitch) }
             Rectangle().fill(MacTheme.line).frame(height: 1).padding(.vertical, 8)
+            sideButton("封神…", symbol: "crown") { onOpen(.cover) }
+            sideButton("摄影棚…", symbol: "camera") { onOpen(.studio) }
+            sideButton("漫画人生", symbol: "book.pages") { onPage(.manga) }
+            Rectangle().fill(MacTheme.line).frame(height: 1).padding(.vertical, 8)
             sideButton(history.hasPassword ? "历史图库（已加密）" : "历史图库", symbol: "photo.stack", action: onHistory)
+            sideButton("满意脸型", symbol: "star") { onPage(.faces) }
             Spacer()
             Button(action: onSettings) {
                 HStack(spacing: 10) {
@@ -463,6 +559,11 @@ struct MacCommands: Commands {
                 .keyboardShortcut("o")
             Button("RAW 冲洗…") { MacSession.shared.importing = .raw }
             Button("拼接截图…") { MacSession.shared.importing = .stitch }
+            Divider()
+            Button("封神…") { MacSession.shared.importing = .cover }
+            Button("摄影棚…") { MacSession.shared.importing = .studio }
+            Button("漫画人生") { MacSession.shared.page = .manga }
+            Button("满意脸型") { MacSession.shared.page = .faces }
         }
         CommandGroup(replacing: .saveItem) {
             Button("导出…") { editor?.save() }

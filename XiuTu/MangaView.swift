@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -134,7 +133,8 @@ struct MangaView: View {
     @State private var tab: Tab = .material
     /// 走到过的最远一步：之前的步骤随时能点回去改，后面的要一步步走过去。
     @State private var reached: Tab = .material
-    @State private var picked: [PhotosPickerItem] = []
+    @State private var picking = false
+    @State private var exports: [MacExport] = []
     @State private var viewing: UIImage?
     @State private var showSettings = false
     @State private var creatingCharacter = false
@@ -146,14 +146,18 @@ struct MangaView: View {
     var body: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
-            VStack(spacing: 0) {
-                topBar.frame(height: 52)
-                content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                stepBar
-                panel
-                stepFooter
+            if Platform.isMac {
+                macLayout
+            } else {
+                VStack(spacing: 0) {
+                    topBar.frame(height: 52)
+                    content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    stepBar
+                    panel
+                    stepFooter
+                }
+                .ignoresSafeArea(.keyboard)
             }
-            .ignoresSafeArea(.keyboard)
             if let toast {
                 VStack {
                     Spacer()
@@ -163,7 +167,7 @@ struct MangaView: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 11)
                         .background(Color(white: 0.2).opacity(0.95), in: Capsule())
-                        .padding(.bottom, 250)
+                        .padding(.bottom, Platform.isMac ? 48 : 250)
                 }
                 .allowsHitTesting(false)
             }
@@ -172,6 +176,9 @@ struct MangaView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        #if DEBUG
+        .onAppear { if let t = Tab(rawValue: ProcessInfo.processInfo.environment["XIUTU_TAB"] ?? "") { tab = t; reached = t } }
+        #endif
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showSettings) { SettingsView() }
         .fullScreenCover(isPresented: $creatingCharacter) {
@@ -183,18 +190,59 @@ struct MangaView: View {
                                 toggleCast: { c in model.toggleCast(c) },
                                 onClose: { detail = nil })
         }
-        .onChange(of: picked) { _, items in
-            guard !items.isEmpty else { return }
+        .imageSource(isPresented: $picking, limit: max(1, 8 - model.photos.count)) { loaders in
             Task {
                 var images: [UIImage] = []
-                for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                        images.append(image)
-                    }
+                for load in loaders {
+                    if let data = await load(), let image = UIImage(data: data) { images.append(image) }
                 }
                 model.add(images)
-                picked = []
             }
+        }
+        .macExport($exports) { _ in
+            MacSession.shared.editorDirty = false
+            show("已导出")
+        }
+        // Mac：拖进窗口的图片当素材。
+        .onChange(of: MacSession.shared.dropped, initial: true) {
+            let files = MacSession.shared.dropped
+            guard !files.isEmpty else { return }
+            MacSession.shared.dropped = []
+            Task {
+                var images: [UIImage] = []
+                for file in files {
+                    if let image = await PhotoLibrary.image(assetID: "", fileURL: file) { images.append(image) }
+                }
+                model.add(images)
+            }
+        }
+        .onChange(of: model.pages.count) { if Platform.isMac, !model.pages.isEmpty { MacSession.shared.editorDirty = true } }
+    }
+
+    private var macLayout: some View {
+        MacWorkbench(title: "漫画人生", onClose: onClose) {
+            if let page = model.currentPage {
+                Button {
+                    exports = [MacExport(page, name: "漫画人生-\(model.pageIndex + 1)", source: "漫画人生")].compactMap { $0 }
+                } label: { Text("导出").macProminent() }
+                .buttonStyle(.plain)
+            }
+        } canvas: {
+            content
+        } header: {
+            stepBar.padding(.top, 4)
+        } panel: {
+            panel
+        } footer: {
+            stepFooter
+        }
+    }
+
+    private func show(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if toast == message { toast = nil }
         }
     }
 
@@ -245,8 +293,8 @@ struct MangaView: View {
                     .padding(.top, 8)
                     .onTapGesture { viewing = page }
                 if model.pages.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                    HScroll {
+                        HRow(spacing: 8) {
                             ForEach(model.pages.indices, id: \.self) { index in
                                 Chip(title: "第 \(index + 1) 页", selected: model.pageIndex == index) { model.pageIndex = index }
                             }
@@ -267,7 +315,8 @@ struct MangaView: View {
                     .multilineTextAlignment(.center)
             }
         } else {
-            let columns = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
+            let columns = Platform.isMac ? [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: 6)]
+                : Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 6) {
                     ForEach(model.photos.indices, id: \.self) { index in
@@ -343,7 +392,7 @@ struct MangaView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     /// 底部：上一步 / 下一步。最后一步换成生成按钮（在面板里）。
@@ -355,7 +404,7 @@ struct MangaView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(Theme.chip, in: Capsule())
+                        .background(Theme.chip, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
                 .disabled(model.running)
@@ -369,7 +418,7 @@ struct MangaView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 46)
-                    .background(canAdvance ? Theme.accent : Theme.accent.opacity(0.35), in: Capsule())
+                    .background(canAdvance ? Theme.accent : Theme.accent.opacity(0.35), in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canAdvance)
@@ -378,7 +427,7 @@ struct MangaView: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 10)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     // MARK: 二、三级选项
@@ -398,14 +447,14 @@ struct MangaView: View {
         .padding(.top, 12)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     private var materialPanel: some View {
         VStack(spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    PhotosPicker(selection: $picked, maxSelectionCount: max(1, 8 - model.photos.count), matching: .images) {
+            HScroll {
+                HRow(spacing: 8) {
+                    Button { picking = true } label: {
                         VStack(spacing: 4) {
                             Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
                             Text("添加").font(.system(size: 11))
@@ -414,6 +463,7 @@ struct MangaView: View {
                         .frame(width: 62, height: 62)
                         .background(Theme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
+                    .buttonStyle(.plain)
                     .disabled(model.photos.count >= 8)
                     ForEach(model.photos.indices, id: \.self) { index in
                         ZStack(alignment: .topTrailing) {
@@ -439,6 +489,7 @@ struct MangaView: View {
                 Chip(title: "续接上一页", selected: model.continueFromLast) { model.continueFromLast.toggle() }
                     .opacity(model.pages.isEmpty ? 0.35 : 1)
                     .disabled(model.pages.isEmpty)
+                    .fixedSize(horizontal: Platform.isMac, vertical: false)
                 Spacer()
             }
         }
@@ -447,8 +498,8 @@ struct MangaView: View {
     /// 角色库：点一下让角色出场（再点取消），长按可以看大图或删除。
     private var castPanel: some View {
         VStack(spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 10) {
+            HScroll {
+                HRow(alignment: .top, spacing: 10) {
                     Button { creatingCharacter = true } label: {
                         VStack(spacing: 6) {
                             VStack(spacing: 4) {
@@ -533,8 +584,8 @@ struct MangaView: View {
                 Chip(title: "彩色", selected: model.isColor) { model.isColor = true }
                 Spacer()
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+            HScroll {
+                HRow(spacing: 10) {
                     ForEach(MangaStyle.allCases) { style in
                         let selected = model.style == style
                         Button { model.style = style } label: {
@@ -547,9 +598,9 @@ struct MangaView: View {
                                 Text(style.subtitle)
                                     .font(.system(size: 10))
                                     .foregroundStyle(Theme.dim)
-                                    .lineLimit(3)
+                                    .lineLimit(Platform.isMac ? nil : 3)
                             }
-                            .frame(width: 118, height: 62, alignment: .topLeading)
+                            .optionCard(width: 118)
                             .padding(10)
                             .background(Theme.chip, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
@@ -604,7 +655,7 @@ struct MangaView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(Theme.accent, in: Capsule())
+                    .background(Theme.accent, in: Theme.buttonShape)
                     .overlay(alignment: .topTrailing) { CornerBadge(text: "AI").offset(x: -6, y: -5) }
             }
             .buttonStyle(.plain)

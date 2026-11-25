@@ -3,7 +3,9 @@ import WebKit
 
 /// 摄影棚。布局和修图编辑器一致：上面是照片或套图，底部一级菜单，菜单上方是二、三级选项。
 struct StudioView: View {
-    let assetID: String
+    var assetID = ""
+    /// Mac：从文件打开的照片。
+    var fileURL: URL?
     var onClose: () -> Void
 
     enum Tab: String, CaseIterable, Identifiable, Hashable {
@@ -66,6 +68,7 @@ struct StudioView: View {
     @State private var viewing: UIImage?
     @State private var showSettings = false
     @State private var toast: String?
+    @State private var exports: [MacExport] = []
     private let settings = AISettings.shared
 
     var body: some View {
@@ -75,21 +78,22 @@ struct StudioView: View {
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
                 .allowsHitTesting(false)
-            VStack(spacing: 0) {
-                topBar.frame(height: 52)
-                content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                // 还没判断出拍人物还是拍场景时，先不把菜单亮出来，免得闪一下又换掉。
-                Group {
-                    StepBar(steps: Tab.list(model.subject), current: tab, reached: reached,
-                            title: { $0.title }, disabled: model.running) { go($0) }
-                    panel
-                    StepFooter(isFirst: tab == Tab.list(model.subject).first, isLast: tab == Tab.list(model.subject).last,
-                               disabled: model.running,
-                               back: { step(-1) }, next: { step(1) })
+            if Platform.isMac {
+                macLayout
+            } else {
+                VStack(spacing: 0) {
+                    topBar.frame(height: 52)
+                    content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // 还没判断出拍人物还是拍场景时，先不把菜单亮出来，免得闪一下又换掉。
+                    Group {
+                        stepBar
+                        panel
+                        stepFooter
+                    }
+                    .opacity(model.isLoading ? 0 : 1)
                 }
-                .opacity(model.isLoading ? 0 : 1)
+                .ignoresSafeArea(.keyboard)
             }
-            .ignoresSafeArea(.keyboard)
             if model.isLoading {
                 ProgressView().controlSize(.large).tint(.white)
             }
@@ -105,7 +109,7 @@ struct StudioView: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 11)
                         .background(Color(white: 0.2).opacity(0.95), in: Capsule())
-                        .padding(.bottom, 250)
+                        .padding(.bottom, Platform.isMac ? 48 : 250)
                 }
                 .allowsHitTesting(false)
             }
@@ -116,10 +120,61 @@ struct StudioView: View {
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
         .task {
-            await model.load(assetID: assetID)
+            await model.load(assetID: assetID, fileURL: fileURL)
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["XIUTU_SUBJECT"] == "person" { model.subject = .person }
+            #endif
             fitMenus()
+            #if DEBUG
+            if let t = Tab(rawValue: ProcessInfo.processInfo.environment["XIUTU_TAB"] ?? "") { go(t) }
+            #endif
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .macExport($exports) { count in
+            MacSession.shared.editorDirty = false
+            show("已导出 \(count) 张")
+        }
+        .onChange(of: model.doneCount) { if Platform.isMac, model.doneCount > 0 { MacSession.shared.editorDirty = true } }
+    }
+
+    private var stepBar: some View {
+        StepBar(steps: Tab.list(model.subject), current: tab, reached: reached,
+                title: { $0.title }, disabled: model.running) { go($0) }
+    }
+
+    private var stepFooter: some View {
+        StepFooter(isFirst: tab == Tab.list(model.subject).first, isLast: tab == Tab.list(model.subject).last,
+                   disabled: model.running,
+                   back: { step(-1) }, next: { step(1) })
+    }
+
+    private var macLayout: some View {
+        MacWorkbench(title: "摄影棚", onClose: onClose) {
+            if model.doneCount > 0 {
+                Button {
+                    exports = model.shots.compactMap { shot in
+                        MacExport(shot.image, name: "摄影棚-\(shot.id + 1)", source: "摄影棚")
+                    }
+                } label: { Text("全部导出").macProminent() }
+                .buttonStyle(.plain)
+            }
+        } canvas: {
+            content
+        } header: {
+            stepBar.padding(.top, 4).opacity(model.isLoading ? 0 : 1)
+        } panel: {
+            panel.opacity(model.isLoading ? 0 : 1)
+        } footer: {
+            stepFooter.opacity(model.isLoading ? 0 : 1)
+        }
+    }
+
+    private func show(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if toast == message { toast = nil }
+        }
     }
 
     private func go(_ t: Tab) {
@@ -191,7 +246,7 @@ struct StudioView: View {
         } else {
             ScrollView {
                 // 横幅的照片一行放一张，其余一行两张。
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: model.shotAspect > 1.2 ? 1 : 2), spacing: 8) {
+                LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(model.shots) { shot in
                         shotCard(shot)
                     }
@@ -200,6 +255,11 @@ struct StudioView: View {
                 .padding(.vertical, 8)
             }
         }
+    }
+
+    private var columns: [GridItem] {
+        if Platform.isMac { return [GridItem(.adaptive(minimum: model.shotAspect > 1.2 ? 380 : 260, maximum: 560), spacing: 8)] }
+        return Array(repeating: GridItem(.flexible(), spacing: 8), count: model.shotAspect > 1.2 ? 1 : 2)
     }
 
     private func shotCard(_ shot: StudioModel.Shot) -> some View {
@@ -265,13 +325,13 @@ struct StudioView: View {
         .padding(.top, 12)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     private var scenePanel: some View {
         VStack(spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+            HScroll {
+                HRow(spacing: 8) {
                     ForEach(model.catalog.categories.indices, id: \.self) { index in
                         let title = model.catalog.categories[index].title
                         Chip(title: StudioIcons.plain(title), symbol: StudioIcons.categorySymbol(title),
@@ -282,11 +342,13 @@ struct StudioView: View {
                 }
             }
             // 原背景在最前面，用自己这张照片做缩略图；后面是这一类的场景。
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 8) {
+            HScroll {
+                HRow(alignment: .top, spacing: 8) {
                     PickTile(title: "原背景", image: model.thumbs["original"], symbol: "photo",
                              selected: model.sceneID == "keep") { model.sceneID = "keep" }
-                    Rectangle().fill(Theme.chip).frame(width: 1, height: StudioLooks.tileHeight - 16).padding(.top, 8)
+                    if !Platform.isMac {
+                        Rectangle().fill(Theme.chip).frame(width: 1, height: StudioLooks.tileHeight - 16).padding(.top, 8)
+                    }
                     ForEach(model.scenes) { scene in
                         let look = StudioIcons.sceneSymbol(scene.title, category: model.catalog.categories[model.categoryIndex].title)
                         PickTile(title: StudioIcons.sceneName(scene.title), symbol: look.0, tint: look.1,
@@ -320,8 +382,8 @@ struct StudioView: View {
                 SymbolChipRow(items: model.catalog.retouchParts, title: { $0.title }, symbol: { StudioIcons.retouchSymbols[$0.id] },
                               isSelected: { model.retouchParts.contains($0.id) }) { toggle(&model.retouchParts, $0.id) }
             case .hair:
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                HScroll {
+                    HRow(spacing: 8) {
                         ForEach(model.catalog.hairColors) { hair in
                             SwatchChip(title: hair.title, swatch: StudioIcons.swatch(hair.swatch),
                                        selected: model.hairColors.contains(hair.id)) { toggle(&model.hairColors, hair.id) }
@@ -373,8 +435,8 @@ struct StudioView: View {
                              selected: model.timeOfDay == t.id) { model.timeOfDay = t.id }
                 }
             case .brands:
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                HScroll {
+                    HRow(spacing: 8) {
                         ForEach(model.catalog.brands.indices, id: \.self) { index in
                             let title = model.catalog.brands[index].title
                             Chip(title: StudioIcons.plain(title), symbol: StudioIcons.brandCategorySymbol(title),
@@ -421,13 +483,11 @@ struct StudioView: View {
         } else if model.running {
             runningRow
         } else {
-            HStack(spacing: 8) {
+            OptionLine(openSettings: { showSettings = true }) {
                 Text("张数").font(.system(size: 13)).foregroundStyle(Theme.dim)
                 ForEach(StudioScene.counts, id: \.self) { n in
                     Chip(title: "\(n)", selected: model.sceneCount == n) { model.sceneCount = n }
                 }
-                Spacer()
-                ProviderMenu(openSettings: { showSettings = true }, compact: true)
             }
             SymbolChipRow(items: StudioScene.variations, title: { $0.title }, symbol: { StudioIcons.variationSymbols[$0.id] },
                           isSelected: { model.sceneVariations.contains($0.id) }) { model.toggleSceneVariation($0.id) }
@@ -437,7 +497,7 @@ struct StudioView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Theme.accent, in: Capsule())
+                        .background(Theme.accent, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
                 Button { model.start(explore: true) } label: {
@@ -445,7 +505,7 @@ struct StudioView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 104, height: 44)
-                        .background(Theme.chip, in: Capsule())
+                        .background(Theme.chip, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
             }
@@ -477,13 +537,11 @@ struct StudioView: View {
         } else if model.running {
             runningRow
         } else {
-            HStack(spacing: 8) {
+            OptionLine(openSettings: { showSettings = true }) {
                 Text("张数").font(.system(size: 13)).foregroundStyle(Theme.dim)
                 ForEach(model.catalog.counts, id: \.self) { n in
                     Chip(title: "\(n)", selected: model.count == n) { model.count = n }
                 }
-                Spacer()
-                ProviderMenu(openSettings: { showSettings = true }, compact: true)
             }
             HStack(spacing: 10) {
                 Button { model.start(explore: false) } label: {
@@ -491,7 +549,7 @@ struct StudioView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Theme.accent, in: Capsule())
+                        .background(Theme.accent, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
                 Button { model.start(explore: true) } label: {
@@ -499,7 +557,7 @@ struct StudioView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 104, height: 44)
-                        .background(Theme.chip, in: Capsule())
+                        .background(Theme.chip, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
             }

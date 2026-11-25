@@ -1,5 +1,4 @@
 import ImageIO
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -109,40 +108,37 @@ struct FavoriteFaceView: View {
     var onClose: () -> Void
 
     private let store = FavoriteFaceStore.shared
-    @State private var picked: PhotosPickerItem?
+    @State private var picking = false
     @State private var busy = false
     @State private var note: String?
     @State private var deleting: FavoriteFace?
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+    private let columns = Platform.isMac ? [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 10)]
+        : Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
         ZStack {
-            Theme.bg.ignoresSafeArea()
+            (Platform.isMac ? MacTheme.canvas : Theme.bg).ignoresSafeArea()
             VStack(spacing: 0) {
-                HStack {
-                    Button(action: onClose) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .frame(width: 44, height: 44)
+                if Platform.isMac {
+                    HStack(spacing: 8) {
+                        Color.clear.frame(width: 70, height: 1)
+                        MacIconButton(symbol: "chevron.left", help: "返回", action: onClose)
+                        Text("满意脸型").font(.system(size: 13, weight: .semibold)).padding(.leading, 4)
+                        Spacer()
+                        Button { picking = true } label: { Text(busy ? "正在添加…" : "添加…").macProminent() }
+                            .buttonStyle(.plain)
+                            .disabled(busy)
                     }
-                    Spacer()
-                    Text("满意脸型").font(.system(size: 17, weight: .semibold))
-                    Spacer()
-                    PhotosPicker(selection: $picked, matching: .images) {
-                        Group {
-                            if busy { ProgressView().tint(.white) } else { Image(systemName: "plus") }
-                        }
-                        .font(.system(size: 19, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                    }
-                    .disabled(busy)
+                    .foregroundStyle(.white)
+                    .padding(.trailing, 12)
+                    .frame(height: 44)
+                    .background(MacTheme.chrome)
+                } else {
+                    phoneBar
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .frame(height: 52)
                 if let note {
-                    Text(note).font(.system(size: 13)).foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
+                    Text(note).font(.system(size: 13)).foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4)).padding(.top, Platform.isMac ? 10 : 0)
                 }
                 if store.faces.isEmpty {
                     Spacer()
@@ -163,17 +159,15 @@ struct FavoriteFaceView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
-        .onChange(of: picked) { _, item in
-            guard let item else { return }
-            picked = nil
-            busy = true
-            note = nil
-            Task {
-                var ok = false
-                if let data = try? await item.loadTransferable(type: Data.self) { ok = await store.add(from: data) }
-                busy = false
-                if !ok { note = "这张图里没有找到人脸" }
-            }
+        .imageSource(isPresented: $picking) { loaders in
+            guard let load = loaders.first else { return }
+            add(load)
+        }
+        // Mac：图片拖进窗口就添加。
+        .onChange(of: MacSession.shared.dropped, initial: true) {
+            guard let file = MacSession.shared.dropped.first else { return }
+            MacSession.shared.dropped = []
+            add { try? Data(contentsOf: file) }
         }
         .confirmationDialog("删除这个满意脸型？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                             titleVisibility: .visible) {
@@ -182,6 +176,42 @@ struct FavoriteFaceView: View {
                 deleting = nil
             }
             Button("取消", role: .cancel) { deleting = nil }
+        }
+    }
+
+    private var phoneBar: some View {
+        HStack {
+            Button(action: onClose) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            Spacer()
+            Text("满意脸型").font(.system(size: 17, weight: .semibold))
+            Spacer()
+            Button { picking = true } label: {
+                Group {
+                    if busy { ProgressView().tint(.white) } else { Image(systemName: "plus") }
+                }
+                .font(.system(size: 19, weight: .semibold))
+                .frame(width: 44, height: 44)
+            }
+            .disabled(busy)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .frame(height: 52)
+    }
+
+    private func add(_ load: @escaping ImageLoader) {
+        guard !busy else { return }
+        busy = true
+        note = nil
+        Task {
+            var ok = false
+            if let data = await load() { ok = await store.add(from: data) }
+            busy = false
+            if !ok { note = "这张图里没有找到人脸" }
         }
     }
 

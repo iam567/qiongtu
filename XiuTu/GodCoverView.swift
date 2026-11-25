@@ -3,7 +3,9 @@ import WebKit
 
 /// "封神"：AI 杂志封面 / 海报。布局和修图编辑器一致：上面是画面，底部是一级菜单，菜单上方是二、三级选项。
 struct GodCoverView: View {
-    let assetID: String
+    var assetID = ""
+    /// Mac：从文件打开的照片。
+    var fileURL: URL?
     var onClose: () -> Void
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -38,6 +40,7 @@ struct GodCoverView: View {
     @State private var saving = false
     @State private var toast: String?
     @State private var toastID = 0
+    @State private var exports: [MacExport] = []
     private let settings = AISettings.shared
 
     var body: some View {
@@ -48,14 +51,18 @@ struct GodCoverView: View {
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
                 .allowsHitTesting(false)
-            VStack(spacing: 0) {
-                topBar.frame(height: 52)
-                canvas
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                panel
-                tabBar
+            if Platform.isMac {
+                macLayout
+            } else {
+                VStack(spacing: 0) {
+                    topBar.frame(height: 52)
+                    canvas
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    panel
+                    tabBar
+                }
+                .ignoresSafeArea(.keyboard)
             }
-            .ignoresSafeArea(.keyboard)
             if model.isLoading || saving {
                 ProgressView()
                     .controlSize(.large)
@@ -75,7 +82,7 @@ struct GodCoverView: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 11)
                         .background(Color(white: 0.2).opacity(0.95), in: Capsule())
-                        .padding(.bottom, 250)
+                        .padding(.bottom, Platform.isMac ? 48 : 250)
                 }
                 .transition(.opacity)
                 .allowsHitTesting(false)
@@ -89,9 +96,50 @@ struct GodCoverView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        #if DEBUG
+        .onAppear { if let t = Tab(rawValue: ProcessInfo.processInfo.environment["XIUTU_TAB"] ?? "") { tab = t } }
+        #endif
         .navigationBarBackButtonHidden(true)
-        .task { await model.load(assetID: assetID) }
+        .task { await model.load(assetID: assetID, fileURL: fileURL) }
+        .macExport($exports) { _ in
+            MacSession.shared.editorDirty = false
+            show("已导出")
+        }
+        .onChange(of: model.hasAI) { if Platform.isMac, model.hasAI { MacSession.shared.editorDirty = true } }
         .sheet(isPresented: $showSettings) { SettingsView() }
+    }
+
+    // MARK: Mac 布局
+
+    private var macLayout: some View {
+        MacWorkbench(title: "封神", onClose: onClose) {
+            Button(action: export) { Text("导出").macProminent() }
+                .buttonStyle(.plain)
+                .disabled(model.isLoading || saving)
+        } canvas: {
+            canvas
+        } header: {
+            SegmentBar(items: Tab.allCases, selected: tab, title: { $0.title }) { tab = $0 }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+        } panel: {
+            panel
+        } footer: {
+            EmptyView()
+        }
+    }
+
+    private func export() {
+        saving = true
+        Task {
+            let data = await model.exportData()
+            saving = false
+            guard let data else {
+                show("导出失败")
+                return
+            }
+            exports = [MacExport(data: data, name: model.mainTitle.isEmpty ? "封神" : model.mainTitle, source: "封神")]
+        }
     }
 
     // MARK: 顶栏
@@ -196,22 +244,22 @@ struct GodCoverView: View {
         .padding(.top, 12)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     private var stylePanel: some View {
         let categories = model.catalog.categories
         return VStack(spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+            HScroll {
+                HRow(spacing: 8) {
                     ForEach(categories.indices, id: \.self) { index in
                         Chip(title: "\(categories[index].icon) \(shortTitle(categories[index].title))",
                              selected: model.categoryIndex == index) { model.categoryIndex = index }
                     }
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+            HScroll {
+                HRow(spacing: 10) {
                     if categories.indices.contains(model.categoryIndex) {
                         ForEach(categories[model.categoryIndex].styles) { style in
                             let selected = model.styleID == style.id
@@ -220,14 +268,14 @@ struct GodCoverView: View {
                                     Text(style.name)
                                         .font(.system(size: 13, weight: .heavy))
                                         .foregroundStyle(selected ? Theme.accent : Color.white)
-                                        .lineLimit(2)
+                                        .lineLimit(Platform.isMac ? nil : 2)
                                         .minimumScaleFactor(0.8)
                                     Text(style.desc)
                                         .font(.system(size: 10))
                                         .foregroundStyle(Theme.dim)
-                                        .lineLimit(2)
+                                        .lineLimit(Platform.isMac ? nil : 2)
                                 }
-                                .frame(width: 104, height: 62, alignment: .topLeading)
+                                .optionCard(width: 104)
                                 .padding(10)
                                 .background(Theme.chip, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .overlay(
@@ -262,7 +310,7 @@ struct GodCoverView: View {
                         .foregroundStyle(.black)
                         .padding(.horizontal, 22)
                         .padding(.vertical, 8)
-                        .background(Theme.accent, in: Capsule())
+                        .background(Theme.accent, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
             }
@@ -286,15 +334,13 @@ struct GodCoverView: View {
             if model.subject == .scene {
                 sceneOptions
             } else {
-                HStack(spacing: 8) {
+                OptionLine(openSettings: { showSettings = true }) {
                     ForEach(GodCoverModel.OptionGroup.allCases) { group in
                         Chip(title: group.title, selected: model.optionGroup == group) { model.optionGroup = group }
                     }
-                    Spacer()
-                    ProviderMenu(openSettings: { showSettings = true }, compact: true)
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                HScroll {
+                    HRow(spacing: 8) {
                         ForEach(model.options(model.optionGroup)) { option in
                             Chip(title: option.title, selected: model.value(model.optionGroup) == option.id) {
                                 model.setValue(option.id, for: model.optionGroup)
@@ -309,7 +355,7 @@ struct GodCoverView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Theme.accent, in: Capsule())
+                        .background(Theme.accent, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
                 Button { model.generate(noText: true) } label: {
@@ -317,7 +363,7 @@ struct GodCoverView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 96, height: 44)
-                        .background(Theme.chip, in: Capsule())
+                        .background(Theme.chip, in: Theme.buttonShape)
                 }
                 .buttonStyle(.plain)
             }
@@ -346,7 +392,7 @@ struct GodCoverView: View {
                                     .foregroundStyle(.black)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
-                                    .background(Theme.accent, in: Capsule())
+                                    .background(Theme.accent, in: Theme.buttonShape)
                             }
                             .buttonStyle(.plain)
                         }
@@ -360,10 +406,18 @@ struct GodCoverView: View {
     /// 场景模式的 AI 改造：封面的主角是场景本身，选项换成大片感、光线、天气、季节、时间、清理。
     @ViewBuilder
     private var sceneOptions: some View {
+        if Platform.isMac {
+            HStack {
+                Spacer()
+                ProviderMenu(openSettings: { showSettings = true }, compact: true)
+            }
+        }
         HStack(spacing: 8) {
             ChipRow(items: GodCoverScene.Group.allCases, title: { $0.title },
                     isSelected: { model.sceneGroup == $0 }) { model.sceneGroup = $0 }
-            ProviderMenu(openSettings: { showSettings = true }, compact: true)
+            if !Platform.isMac {
+                ProviderMenu(openSettings: { showSettings = true }, compact: true)
+            }
         }
         ChipRow(items: model.sceneGroup.options, title: { $0.title },
                 isSelected: { model.sceneValue(model.sceneGroup) == $0.id }) {
@@ -381,8 +435,8 @@ struct GodCoverView: View {
                 textCell(.extra1)
                 textCell(.extra2)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+            HScroll {
+                HRow(spacing: 8) {
                     Chip(title: "🎲 随机文案", selected: false) {
                         Task { await model.randomizeText(render: true) }
                     }
@@ -398,7 +452,19 @@ struct GodCoverView: View {
         }
     }
 
+    @ViewBuilder
     private func textCell(_ field: TextField) -> some View {
+        if Platform.isMac {
+            MacFieldCell(title: field.title, text: Binding(get: { text(field) }, set: {
+                setText(field, $0)
+                model.refresh()
+            }))
+        } else {
+            phoneTextCell(field)
+        }
+    }
+
+    private func phoneTextCell(_ field: TextField) -> some View {
         let value = text(field)
         return Button { editing = field } label: {
             VStack(alignment: .leading, spacing: 3) {
@@ -423,8 +489,8 @@ struct GodCoverView: View {
             sliderRow("缩放", value: $model.scale, range: 50...200, unit: "%")
             sliderRow("水平", value: $model.offsetX, range: -100...100, unit: "")
             sliderRow("垂直", value: $model.offsetY, range: -100...100, unit: "")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+            HScroll {
+                HRow(spacing: 8) {
                     ForEach(model.catalog.filter) { option in
                         Chip(title: option.title, selected: model.filter == option.id) {
                             model.filter = option.id
@@ -480,9 +546,15 @@ struct GodCoverView: View {
         Task {
             let ok = await model.save()
             saving = false
-            toastID += 1
-            let id = toastID
-            withAnimation(.easeOut(duration: 0.15)) { toast = ok ? "已保存到相册" : "保存失败，请检查相册权限" }
+            show(ok ? "已保存到相册" : "保存失败，请检查相册权限")
+        }
+    }
+
+    private func show(_ message: String) {
+        toastID += 1
+        let id = toastID
+        withAnimation(.easeOut(duration: 0.15)) { toast = message }
+        Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             if id == toastID { withAnimation(.easeIn(duration: 0.2)) { toast = nil } }
         }

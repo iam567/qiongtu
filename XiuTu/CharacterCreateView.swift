@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -149,7 +148,7 @@ struct CharacterCreateView: View {
 
     @State private var model = CharacterCreateModel()
     @State private var tab: Tab = .profile
-    @State private var picked: PhotosPickerItem?
+    @State private var picking = false
     @State private var editing: Field?
     @State private var viewing: UIImage?
     @State private var showSettings = false
@@ -158,13 +157,17 @@ struct CharacterCreateView: View {
     var body: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
-            VStack(spacing: 0) {
-                topBar.frame(height: 52)
-                content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                panel
-                BottomTabBar(tabs: Tab.allCases, title: { $0.title }, selection: $tab)
+            if Platform.isMac {
+                macLayout
+            } else {
+                VStack(spacing: 0) {
+                    topBar.frame(height: 52)
+                    content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    panel
+                    BottomTabBar(tabs: Tab.allCases, title: { $0.title }, selection: $tab)
+                }
+                .ignoresSafeArea(.keyboard)
             }
-            .ignoresSafeArea(.keyboard)
             if let field = editing {
                 TextInputOverlay(initial: field == .name ? model.name : model.bio,
                                  placeholder: field == .name ? "角色名字" : "角色设定，比如：爱笑、总是戴着耳机") { value in
@@ -179,15 +182,41 @@ struct CharacterCreateView: View {
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showSettings) { SettingsView() }
-        .onChange(of: picked) { _, item in
-            guard let item else { return }
-            Task {
-                if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                    model.photo = AIOneShot.prepared(image, maxSide: 2048)
-                }
-                picked = nil
-            }
+        .imageSource(isPresented: $picking) { loaders in
+            Task { if let data = await loaders.first?() { setPhoto(UIImage(data: data)) } }
         }
+        .onDrop(of: [.fileURL, .image], isTargeted: nil) { providers in
+            guard Platform.isMac, !model.running else { return false }
+            Task {
+                guard let url = await MacRootView.urls(from: providers).first else { return }
+                setPhoto(await PhotoLibrary.image(assetID: "", fileURL: url))
+            }
+            return true
+        }
+    }
+
+    private func setPhoto(_ image: UIImage?) {
+        if let image { model.photo = AIOneShot.prepared(image, maxSide: 2048) }
+    }
+
+    private var macLayout: some View {
+        MacWorkbench(title: "新建角色", onClose: onClose) {
+            if model.savedCount > 0, !model.running {
+                Button(action: onClose) { Text("完成").macProminent() }
+                    .buttonStyle(.plain)
+            }
+        } canvas: {
+            content
+        } header: {
+            SegmentBar(items: Tab.allCases, selected: tab, title: { $0.title }) { tab = $0 }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+        } panel: {
+            panel
+        } footer: {
+            EmptyView()
+        }
+        .ignoresSafeArea()
     }
 
     private var topBar: some View {
@@ -221,7 +250,8 @@ struct CharacterCreateView: View {
     private var content: some View {
         if !model.results.isEmpty {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                LazyVGrid(columns: Platform.isMac ? [GridItem(.adaptive(minimum: 240, maximum: 320), spacing: 8)]
+                          : Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
                     ForEach(model.results) { result in
                         resultCard(result)
                     }
@@ -237,7 +267,7 @@ struct CharacterCreateView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                PhotosPicker(selection: $picked, matching: .images) {
+                Button { picking = true } label: {
                     Text("换一张照片")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
@@ -245,10 +275,11 @@ struct CharacterCreateView: View {
                         .padding(.vertical, 8)
                         .background(Color.black.opacity(0.6), in: Capsule())
                 }
+                .buttonStyle(.plain)
                 .padding(.bottom, 20)
             }
         } else {
-            PhotosPicker(selection: $picked, matching: .images) {
+            Button { picking = true } label: {
                 VStack(spacing: 12) {
                     Image(systemName: "person.crop.rectangle.badge.plus")
                         .font(.system(size: 44))
@@ -264,6 +295,7 @@ struct CharacterCreateView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
     }
 
@@ -324,22 +356,27 @@ struct CharacterCreateView: View {
         .padding(.top, 12)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(Theme.panel)
+        .background(Theme.sheet)
     }
 
     private var profilePanel: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
-                fieldCell("名字", value: model.name, placeholder: "可不填") { editing = .name }
-                fieldCell("设定", value: model.bio, placeholder: "可不填") { editing = .bio }
+                if Platform.isMac {
+                    MacFieldCell(title: "名字", text: $model.name)
+                    MacFieldCell(title: "设定", text: $model.bio)
+                } else {
+                    fieldCell("名字", value: model.name, placeholder: "可不填") { editing = .name }
+                    fieldCell("设定", value: model.bio, placeholder: "可不填") { editing = .bio }
+                }
             }
             HStack(spacing: 8) {
                 ForEach(CharacterGender.allCases) { item in
                     Chip(title: item.displayName, selected: model.gender == item) { model.gender = item }
                 }
                 Rectangle().fill(Theme.chip).frame(width: 1, height: 20)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                HScroll {
+                    HRow(spacing: 8) {
                         ForEach(CharacterAgeGroup.allCases) { item in
                             Chip(title: item.displayName, selected: model.ageGroup == item) { model.ageGroup = item }
                         }
@@ -378,8 +415,8 @@ struct CharacterCreateView: View {
                     .foregroundStyle(Theme.dim)
                 Spacer()
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+            HScroll {
+                HRow(spacing: 10) {
                     ForEach(CharacterArtStyle.allCases) { style in
                         let selected = model.styles.contains(style)
                         Button { model.toggle(style) } label: {
@@ -395,9 +432,9 @@ struct CharacterCreateView: View {
                                 Text(style.subtitle)
                                     .font(.system(size: 10))
                                     .foregroundStyle(Theme.dim)
-                                    .lineLimit(3)
+                                    .lineLimit(Platform.isMac ? nil : 3)
                             }
-                            .frame(width: 118, height: 62, alignment: .topLeading)
+                            .optionCard(width: 118)
                             .padding(10)
                             .background(Theme.chip, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
@@ -447,7 +484,7 @@ struct CharacterCreateView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(Theme.accent, in: Capsule())
+                    .background(Theme.accent, in: Theme.buttonShape)
             }
             .buttonStyle(.plain)
             Text(model.savedCount > 0
