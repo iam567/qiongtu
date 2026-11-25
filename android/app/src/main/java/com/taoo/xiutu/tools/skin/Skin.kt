@@ -186,6 +186,7 @@ data class SkinParams(
 
 /** 皮肤这一步。 */
 class SkinOp(val params: SkinParams) : EditOp {
+    override val skipsColor: Boolean get() = true
     override fun apply(src: Bitmap): Bitmap = params.apply(src)
 }
 

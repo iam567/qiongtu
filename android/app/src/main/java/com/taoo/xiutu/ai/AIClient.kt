@@ -134,6 +134,12 @@ object AIClient {
         mainHandler.post { AISettings.addUsage(usage) }
     }
 
+    /** 看图、只回文字的请求：记用量。 */
+    private fun noteLook(endpoint: AIEndpoint, model: String, input: Int, output: Int) {
+        if (input + output <= 0) return
+        finish(AIUsage(model, input, 0, output, provider = endpoint.provider, outputText = output, images = 0))
+    }
+
     // JSON 小工具
 
     private val JsonElement?.obj: JsonObject? get() = this as? JsonObject
@@ -788,6 +794,106 @@ object AIClient {
             }
             AIProvider.MINIMAX, AIProvider.QWEN, AIProvider.DOUBAO, AIProvider.FLUX -> endpoint.provider.builtinModels.map { it.id }
         }
+    }
+
+    // 看图
+
+    /**
+     * 各家能看图、只回文字的型号，前面的不行就换后面的。查官方文档得到（2026-11-26），和 iOS 一致。
+     */
+    private fun lookModels(endpoint: AIEndpoint): List<String> = when (endpoint.provider) {
+        AIProvider.OPENAI -> listOf("gpt-6.1-terra", "gpt-6-luna", "gpt-5.4-mini")
+        AIProvider.CUSTOM -> listOf("gpt-6.1-terra", "gpt-6-luna", endpoint.model)
+        AIProvider.GEMINI -> listOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
+        AIProvider.GROK -> listOf("grok-4.3", "grok-4.7")
+        AIProvider.QWEN -> listOf("qwen4-max", "qwen3.7-plus")
+        AIProvider.DOUBAO -> listOf("doubao-seed-2-1-pro-260915")
+        AIProvider.MINIMAX -> listOf("MiniMax-M3.1-Flash", "MiniMax-M3")
+        AIProvider.FLUX -> emptyList()
+    }
+
+    /** 看一张图，回答文字。 */
+    suspend fun look(endpoint: AIEndpoint, prompt: String, jpeg: ByteArray): String = withContext(Dispatchers.IO) {
+        val models = lookModels(endpoint)
+        if (models.isEmpty()) throw AIError("${endpoint.provider.shortTitle} 只能画图、不能看图，换一家服务商再试。")
+        var last: AIError? = null
+        for (model in models) {
+            try {
+                return@withContext look(endpoint, model, prompt, jpeg)
+            } catch (e: AIError) {
+                // 这个 Key 用不了这个型号：换下一个（被拒的不计费）。
+                val aboutModel = e.raw.lowercase().contains("model")
+                if (e.status == 404 || ((e.status == 400 || e.status == 403) && aboutModel)) last = e else throw e
+            }
+        }
+        throw last ?: AIError("没有可用的看图型号。")
+    }
+
+    private suspend fun look(endpoint0: AIEndpoint, model: String, prompt: String, jpeg: ByteArray): String {
+        if (endpoint0.provider == AIProvider.GEMINI) {
+            checkKey(endpoint0)
+            val input = buildJsonArray {
+                add(buildJsonObject { put("type", "text"); put("text", prompt) })
+                add(buildJsonObject { put("type", "image"); put("mime_type", "image/jpeg"); put("data", b64(jpeg)) })
+            }
+            val request = Request.Builder().url(url(endpoint0, "/interactions"))
+                .header("x-goog-api-key", endpoint0.key)
+                .header("Api-Revision", "2026-05-20")
+                .post(buildJsonObject { put("model", model); put("input", input) }.toString().toRequestBody(jsonType))
+                .build()
+            val json = send(request, AIProvider.GEMINI)
+            val images = mutableListOf<String>()
+            val texts = mutableListOf<String>()
+            // 只读输出，不把发出去的指令也读进来。
+            collect(json["steps"] ?: json["outputs"] ?: json, images, texts)
+            val usage = json["usage"].obj
+            noteLook(
+                endpoint0, model, int(usage?.get("total_input_tokens")),
+                int(usage?.get("total_output_tokens")) + int(usage?.get("total_thought_tokens")),
+            )
+            return json["output_text"].str ?: texts.joinToString("\n")
+        }
+        // 千问看图走 OpenAI 兼容的地址。
+        val endpoint = if (endpoint0.provider == AIProvider.QWEN) {
+            endpoint0.copy(baseURL = endpoint0.baseURL.replace("/api/v1", "/compatible-mode/v1"))
+        } else endpoint0
+        fun body(options: Boolean) = buildJsonObject {
+            put("model", model)
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("content", buildJsonArray {
+                        add(buildJsonObject { put("type", "text"); put("text", prompt) })
+                        add(buildJsonObject {
+                            put("type", "image_url")
+                            put("image_url", buildJsonObject {
+                                put("url", dataURI(jpeg, "image/jpeg"))
+                                if (options && endpoint.provider in listOf(AIProvider.OPENAI, AIProvider.DOUBAO, AIProvider.MINIMAX)) put("detail", "high")
+                            })
+                        })
+                    })
+                })
+            })
+            if (options) {
+                if (endpoint.provider == AIProvider.OPENAI || endpoint.provider == AIProvider.MINIMAX) put("reasoning_effort", "low")
+                if (endpoint.provider == AIProvider.QWEN) put("enable_thinking", false)
+            }
+        }
+        suspend fun attempt(options: Boolean) = send(jsonRequest(endpoint, "/chat/completions", body(options)), endpoint.provider)
+        val json = try {
+            attempt(true)
+        } catch (e: AIError) {
+            // 有的型号不认这几个可选参数：去掉再发一次（被拒的那次不计费）。
+            if (e.status == 400 && listOf("reasoning", "detail", "thinking").any { e.raw.contains(it) }) attempt(false) else throw e
+        }
+        val usage = json["usage"].obj
+        noteLook(endpoint, model, int(usage?.get("prompt_tokens")), int(usage?.get("completion_tokens")))
+        val message = json["choices"].arr?.firstOrNull().obj?.get("message").obj
+        message?.get("content").str?.let { return it }
+        // 有的兼容服务把内容拆成一块块的。
+        val parts = message?.get("content").arr.orEmpty().mapNotNull { it.obj?.get("text").str }
+        if (parts.isEmpty()) throw AIError("${endpoint.provider.shortTitle} 没有回答。")
+        return parts.joinToString("")
     }
 
     // 通用

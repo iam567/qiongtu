@@ -109,7 +109,13 @@ object PhotoLibrary {
 /** 相册选图：点缩略图直接进编辑，点右下角的小按钮先放大预览。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PhotoPickerScreen(onPick: (Uri) -> Unit, onClose: () -> Unit) {
+fun PhotoPickerScreen(
+    onPick: (Uri) -> Unit,
+    onClose: () -> Unit,
+    /** 大于 0 时可以多选（最多这么多张），点"添加"交给 onPickMany。 */
+    limit: Int = 0,
+    onPickMany: (List<Uri>) -> Unit = {},
+) {
     val context = LocalContext.current
     var access by remember { mutableStateOf<Boolean?>(if (PhotoLibrary.granted(context)) true else null) }
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
@@ -117,6 +123,11 @@ fun PhotoPickerScreen(onPick: (Uri) -> Unit, onClose: () -> Unit) {
     var images by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var preview by remember { mutableStateOf<Int?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var chosen by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val many = limit > 0
+    fun toggle(uri: Uri) {
+        chosen = if (uri in chosen) chosen - uri else if (chosen.size < limit) chosen + uri else chosen
+    }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         access = PhotoLibrary.granted(context)
@@ -124,7 +135,10 @@ fun PhotoPickerScreen(onPick: (Uri) -> Unit, onClose: () -> Unit) {
     LaunchedEffect(Unit) {
         if (access != true) {
             val perms = if (Build.VERSION.SDK_INT >= 34) arrayOf(PhotoLibrary.permission, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) else arrayOf(PhotoLibrary.permission)
-            launcher.launch(perms)
+            launcher.launch(if (many) perms + Manifest.permission.ACCESS_MEDIA_LOCATION else perms)
+        } else if (many && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // 导出时要保留照片里的拍摄地点
+            launcher.launch(arrayOf(Manifest.permission.ACCESS_MEDIA_LOCATION))
         }
     }
     LaunchedEffect(access, current) {
@@ -139,6 +153,12 @@ fun PhotoPickerScreen(onPick: (Uri) -> Unit, onClose: () -> Unit) {
         Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp)) {
             Box(Modifier.size(44.dp).align(Alignment.CenterStart).tap(onClick = onClose), contentAlignment = Alignment.Center) {
                 Icon(sym("xmark"), "关闭", tint = Color.White)
+            }
+            if (many && chosen.isNotEmpty()) {
+                Box(
+                    Modifier.align(Alignment.CenterEnd).clip(CircleShape).background(Color.White).press { onPickMany(chosen) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) { Text("添加 ${chosen.size} 张", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
             }
             Box(Modifier.align(Alignment.Center)) {
                 Row(
@@ -172,7 +192,15 @@ fun PhotoPickerScreen(onPick: (Uri) -> Unit, onClose: () -> Unit) {
                             var bmp by remember(uri) { mutableStateOf<Bitmap?>(null) }
                             LaunchedEffect(uri) { bmp = PhotoLibrary.thumb(context, uri) }
                             bmp?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-                            Box(Modifier.fillMaxSize().tap { onPick(uri) })
+                            Box(Modifier.fillMaxSize().tap { if (many) toggle(uri) else onPick(uri) })
+                            val order = chosen.indexOf(uri)
+                            if (order >= 0) {
+                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+                                Box(
+                                    Modifier.align(Alignment.TopEnd).padding(5.dp).size(24.dp).clip(CircleShape).background(Theme.accent),
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("${order + 1}", fontSize = 12.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
+                            }
                             Box(
                                 Modifier.align(Alignment.BottomEnd).padding(5.dp).size(26.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).tap { preview = i },
                                 contentAlignment = Alignment.Center,
@@ -199,8 +227,9 @@ fun PhotoPickerScreen(onPick: (Uri) -> Unit, onClose: () -> Unit) {
                 Row(Modifier.fillMaxWidth().systemBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).tap { preview = null }, contentAlignment = Alignment.Center) { Icon(sym("xmark"), "关闭", tint = Color.White) }
                     Spacer(Modifier.weight(1f))
-                    Box(Modifier.clip(CircleShape).background(Color.White).press { val u = images[pager.currentPage]; preview = null; onPick(u) }.padding(horizontal = 20.dp, vertical = 9.dp)) {
-                        Text("编辑", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                    Box(Modifier.clip(CircleShape).background(Color.White).press { val u = images[pager.currentPage]; preview = null; if (many) toggle(u) else onPick(u) }.padding(horizontal = 20.dp, vertical = 9.dp)) {
+                        val u = images.getOrNull(pager.currentPage)
+                        Text(if (!many) "编辑" else if (u in chosen) "取消选择" else "选择", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                     }
                 }
             }

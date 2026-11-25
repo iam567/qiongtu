@@ -98,39 +98,39 @@ object MasterPreview {
                 temperature = 0.04f; fade = 0.12f; shadowTint = V3(0.0f, 0.006f, 0.01f)
             },
             make("森山大道", vignette = 0.3f) {
-                mono = true; monoWeights = V3(0.3f, 0.5f, 0.2f); contrast = 0.9f; shadows = -0.5f; highlights = 0.2f
+                contrast = 0.55f; shadows = -0.35f; highlights = 0.15f; saturation = 0.15f
             },
             make("何藩", vignette = 0.35f) {
-                mono = true; contrast = 0.7f; shadows = -0.6f; highlights = 0.1f; exposure = -0.1f
+                contrast = 0.5f; shadows = -0.45f; temperature = 0.1f; shadowTint = V3(-0.02f, 0.005f, 0.02f); highlightTint = V3(0.04f, 0.02f, -0.02f)
             },
             make("布列松") {
-                mono = true; contrast = 0.25f; shadows = 0.05f
+                contrast = 0.16f; saturation = -0.18f; shadows = 0.04f
             },
             make("薇薇安·迈尔") {
-                mono = true; monoWeights = V3(0.25f, 0.6f, 0.15f); contrast = 0.15f; fade = 0.12f; shadows = 0.1f
+                contrast = 0.14f; saturation = 0.1f; fade = 0.1f; temperature = 0.06f; highlightTint = V3(0.02f, 0.01f, -0.015f)
             },
             make("萨尔加多", vignette = 0.3f) {
-                mono = true; monoWeights = V3(0.5f, 0.4f, 0.1f); contrast = 0.6f; highlights = -0.3f; shadows = -0.2f
+                contrast = 0.4f; saturation = -0.12f; highlights = -0.25f; shadows = -0.12f; highlightTint = V3(0.035f, 0.02f, -0.015f)
             },
             make("安塞尔·亚当斯") {
-                mono = true; monoWeights = V3(0.6f, 0.35f, 0.05f); contrast = 0.5f; highlights = -0.15f; shadows = 0.1f
+                contrast = 0.3f; highlights = -0.15f; shadows = 0.1f; saturation = 0.08f; vibrance = 0.2f
             },
             make("莱博维茨", vignette = 0.35f) {
                 contrast = 0.3f; saturation = -0.1f; shadows = -0.2f; temperature = 0.06f
                 shadowTint = V3(0.0f, 0.01f, 0.02f); highlightTint = V3(0.025f, 0.012f, -0.01f)
             },
             make("林德伯格", vignette = 0.15f) {
-                mono = true; contrast = 0.2f; fade = 0.08f; highlights = -0.1f
+                contrast = 0.1f; saturation = -0.28f; fade = 0.08f; highlights = -0.08f
             },
             make("阿维顿") {
-                mono = true; exposure = 0.2f; contrast = 0.45f; highlights = 0.3f
+                exposure = 0.2f; contrast = 0.22f; saturation = -0.05f; highlights = 0.2f
             },
             make("欧文·佩恩", vignette = 0.2f) {
                 saturation = -0.55f; contrast = 0.2f; fade = 0.1f; temperature = 0.03f
                 highlightTint = V3(0.01f, 0.008f, 0.0f)
             },
             make("牛顿") {
-                mono = true; contrast = 0.8f; shadows = -0.3f; highlights = 0.25f
+                contrast = 0.5f; shadows = -0.2f; saturation = 0.1f; highlights = 0.15f
             },
             make("麦柯里", vignette = 0.2f) {
                 saturation = 0.3f; vibrance = 0.25f; contrast = 0.25f; temperature = 0.08f; shadows = -0.05f

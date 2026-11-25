@@ -11,7 +11,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -78,6 +80,14 @@ fun Modifier.press(enabled: Boolean = true, onClick: () -> Unit): Modifier {
 fun Modifier.tap(enabled: Boolean = true, onClick: () -> Unit): Modifier {
     val source = remember { MutableInteractionSource() }
     return clickable(interactionSource = source, indication = null, enabled = enabled, onClick = onClick)
+}
+
+/** 点一下 / 长按，没有水波纹。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun Modifier.tapOrHold(onClick: () -> Unit, onHold: () -> Unit): Modifier {
+    val source = remember { MutableInteractionSource() }
+    return combinedClickable(source, null, onLongClick = onHold, onClick = onClick)
 }
 
 /** 小角标：凡是会调用 AI 生成的按钮，右上角都带一个 "AI"。 */

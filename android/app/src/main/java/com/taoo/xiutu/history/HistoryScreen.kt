@@ -38,6 +38,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.taoo.xiutu.batch.StyleStore
 import com.taoo.xiutu.core.Img
 import com.taoo.xiutu.editor.ZoomableCanvas
 import com.taoo.xiutu.tools.beauty.FavoriteFaceStore
@@ -56,7 +57,13 @@ private val warnRed = Color(1f, 0.45f, 0.4f)
 /** 历史图库：App 里留的那份图。可以设密码、批量删除、一键清空。onApply：把某张图的处理步骤套到一张新照片上。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(onEdit: (File) -> Unit, onApply: (String) -> Unit, onClose: () -> Unit) {
+fun HistoryScreen(
+    onEdit: (File) -> Unit,
+    onApply: (String) -> Unit,
+    /** 存成风格，接着批量处理照片。 */
+    onBatch: (String) -> Unit = {},
+    onClose: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = HistoryStore
@@ -75,6 +82,13 @@ fun HistoryScreen(onEdit: (File) -> Unit, onApply: (String) -> Unit, onClose: ()
         scope.launch {
             delay(2000)
             if (toast == message) toast = null
+        }
+    }
+
+    fun saveStyle(item: HistoryItem, batch: Boolean) {
+        scope.launch {
+            val style = StyleStore.add(store.file(item))
+            if (style == null) show("保存失败") else if (batch) onBatch(style.id) else show("已保存此风格")
         }
     }
 
@@ -151,7 +165,7 @@ fun HistoryScreen(onEdit: (File) -> Unit, onApply: (String) -> Unit, onClose: ()
                             contentPadding = PaddingValues(bottom = 20.dp),
                         ) {
                             items(store.items, key = { it.id }) { item ->
-                                HistoryCell(item, selecting, item.id in selected) {
+                                HistoryCell(item, selecting, item.id in selected, onStyle = { batch -> saveStyle(item, batch) }) {
                                     if (selecting) selected = if (item.id in selected) selected - item.id else selected + item.id
                                     else viewing = item
                                 }
@@ -233,10 +247,15 @@ private fun ConfirmDialog(title: String, action: String, onDismiss: () -> Unit, 
 
 /** 图库里的一格。 */
 @Composable
-private fun HistoryCell(item: HistoryItem, selecting: Boolean, selected: Boolean, onClick: () -> Unit) {
+private fun HistoryCell(item: HistoryItem, selecting: Boolean, selected: Boolean, onStyle: (Boolean) -> Unit, onClick: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
     var image by remember(item.id) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(item.id) { image = HistoryStore.thumbnail(item) }
-    Box(Modifier.aspectRatio(1f).background(Color(0.12f, 0.12f, 0.12f)).tap(onClick = onClick)) {
+    Box(Modifier.aspectRatio(1f).background(Color(0.12f, 0.12f, 0.12f)).tapOrHold(onClick) { menu = true }) {
+        DropdownMenu(menu, { menu = false }, containerColor = Theme.chip) {
+            DropdownMenuItem(text = { Text("保存此风格", color = Color.White) }, onClick = { menu = false; onStyle(false) })
+            DropdownMenuItem(text = { Text("用此风格批量处理…", color = Color.White) }, onClick = { menu = false; onStyle(true) })
+        }
         image?.let {
             val ib = remember(it) { it.asImageBitmap() }
             Image(ib, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

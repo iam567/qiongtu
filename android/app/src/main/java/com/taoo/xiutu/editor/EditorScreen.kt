@@ -63,6 +63,7 @@ fun MainTab.entries(): List<MenuEntry> {
         MainTab.TOOLS -> listOf(
             MenuEntry(Tool.CROP), MenuEntry(Tool.FILTER), MenuEntry(Tool.ADJUST),
             MenuEntry("消除", "eraser", "AI", MenuAction.Erase),
+            MenuEntry(Tool.RETOUCH),
             MenuEntry(Tool.COLLAGE), MenuEntry(Tool.LAYERS),
         )
         MainTab.BEAUTY -> listOf(
@@ -77,6 +78,7 @@ fun MainTab.entries(): List<MenuEntry> {
             MenuEntry("增高", "arrow.up.and.down", null, MenuAction.ToolMode(Tool.SHAPE, "tall")),
             MenuEntry("瘦身", "arrow.right.and.line.vertical.and.arrow.left", null, MenuAction.ToolMode(Tool.SHAPE, "slim")),
             MenuEntry("缩放", "circle.dashed", null, MenuAction.ToolMode(Tool.SHAPE, "zoom")),
+            MenuEntry(Tool.BODY_TONE),
             MenuEntry("推拉", "hand.draw", null, MenuAction.OpenTool(Tool.LIQUIFY)),
             MenuEntry("AI 美体", "sparkles", "AI", MenuAction.OpenAI(AIPresetGroup.BODY)),
         )
@@ -85,7 +87,8 @@ fun MainTab.entries(): List<MenuEntry> {
             MenuEntry(Tool.STICKER), MenuEntry(Tool.TEXT), MenuEntry(Tool.GRAPHIC), MenuEntry(Tool.DOODLE), MenuEntry(Tool.FRAME),
             MenuEntry(Tool.BACKDROP), MenuEntry(Tool.MARK), MenuEntry(Tool.MOSAIC),
         )
-        MainTab.AI -> AIPresetGroup.editGroups.map { MenuEntry(it.menuTitle, it.symbol, "AI", MenuAction.OpenAI(it)) }
+        MainTab.AI -> AIPresetGroup.editGroups.map { MenuEntry(it.menuTitle, it.symbol, "AI", MenuAction.OpenAI(it)) } +
+            MenuEntry(Tool.SMART_CROP.title, Tool.SMART_CROP.symbol, "AI", MenuAction.OpenTool(Tool.SMART_CROP))
         MainTab.FILTER, MainTab.EFFECT, MainTab.ADJUST -> emptyList()
     }
     return list.filter { e ->

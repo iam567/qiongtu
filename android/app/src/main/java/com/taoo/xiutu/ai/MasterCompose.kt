@@ -2,6 +2,7 @@ package com.taoo.xiutu.ai
 
 import android.graphics.Bitmap
 import com.taoo.xiutu.ml.FaceDetector
+import com.taoo.xiutu.ml.FaceFinder
 import com.taoo.xiutu.tools.shape.ShapeBodyDetector
 
 /**
@@ -78,8 +79,9 @@ object MasterCompose {
         return base.replace(KEEP_TAIL, tail)
     }
 
-    /** 照片里有没有人：认出人脸或者人体姿态都算有。 */
+    /** 照片里有没有人：认出人脸或者人体姿态都算有；人很小时切块放大再找一遍。 */
     fun hasPerson(image: Bitmap): Boolean =
-        runCatching { FaceDetector.detect(image).isNotEmpty() }.getOrDefault(false) ||
-            runCatching { ShapeBodyDetector.detect(image).isNotEmpty() }.getOrDefault(false)
+        runCatching { FaceDetector.direct(image).isNotEmpty() }.getOrDefault(false) ||
+            runCatching { ShapeBodyDetector.detect(image).isNotEmpty() }.getOrDefault(false) ||
+            runCatching { FaceFinder.deep(image, thorough = true).isNotEmpty() }.getOrDefault(false)
 }

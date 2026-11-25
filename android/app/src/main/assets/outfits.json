@@ -1,0 +1,757 @@
+{
+ "colors": {
+  "粉色": "F4A6BD",
+  "红色": "D8283A",
+  "蓝色": "5B8FD6",
+  "白色": "F5F3EF",
+  "香槟色": "E6CDA5",
+  "紫色": "A07CCB",
+  "金色": "D9B04A",
+  "黑色": "2A2A2E",
+  "墨绿色": "1F5A46",
+  "银色": "C3C8CF",
+  "酒红色": "7A1F33",
+  "象牙白": "F1E9D8",
+  "浅青色": "A9D6D0",
+  "浅紫色": "C9B4E3",
+  "橙色": "EE8A3C",
+  "绿色": "5FA463",
+  "灰色": "8E9196",
+  "米色": "E3D5BE",
+  "浅蓝色": "A9CBEB",
+  "卡其色": "C2A477",
+  "驼色": "B88A57",
+  "棕色": "7A5236"
+ },
+ "outfits": [
+  {
+   "group": "礼服",
+   "title": "公主裙",
+   "shape": "gown",
+   "prompt": "童话公主的蓬蓬长礼服：合身的收腰上身、泡泡袖或一字肩，层层叠叠的薄纱大裙摆，有刺绣和小花装饰",
+   "colors": [
+    "粉色",
+    "红色",
+    "蓝色",
+    "白色",
+    "香槟色",
+    "紫色",
+    "金色",
+    "黑色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "礼服",
+   "title": "花仙裙",
+   "shape": "gown",
+   "prompt": "缀满立体花朵和藤蔓刺绣的薄纱长礼服，一字肩纱袖，裙身从上到下散落着花瓣",
+   "colors": [
+    "粉色",
+    "白色",
+    "紫色",
+    "蓝色",
+    "香槟色",
+    "红色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "礼服",
+   "title": "晚礼服",
+   "shape": "mermaid",
+   "prompt": "高级定制的修身晚礼服，缎面光泽，收腰，鱼尾裙摆",
+   "colors": [
+    "红色",
+    "黑色",
+    "香槟色",
+    "墨绿色",
+    "蓝色",
+    "白色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "礼服",
+   "title": "亮片礼服",
+   "shape": "mermaid",
+   "prompt": "满身亮片的闪光长礼服，修身剪裁，随光线闪烁",
+   "colors": [
+    "金色",
+    "银色",
+    "红色",
+    "黑色",
+    "蓝色",
+    "香槟色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "礼服",
+   "title": "复古宫廷",
+   "shape": "gown",
+   "prompt": "十八世纪欧洲宫廷裙：方领、束腰上身、蕾丝荷叶袖，宽大的撑裙和绸缎褶皱",
+   "colors": [
+    "香槟色",
+    "蓝色",
+    "粉色",
+    "酒红色",
+    "墨绿色",
+    "白色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "礼服",
+   "title": "小礼裙",
+   "shape": "short",
+   "prompt": "及膝的小礼裙，收腰，蓬松的短裙摆，精致的领口",
+   "colors": [
+    "黑色",
+    "红色",
+    "白色",
+    "粉色",
+    "香槟色",
+    "蓝色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "婚纱",
+   "title": "蓬裙婚纱",
+   "shape": "gown",
+   "prompt": "蓬蓬裙婚纱：蕾丝刺绣上身，多层薄纱大裙摆，庄重华丽",
+   "colors": [
+    "白色",
+    "象牙白",
+    "香槟色",
+    "粉色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "婚纱",
+   "title": "鱼尾婚纱",
+   "shape": "mermaid",
+   "prompt": "鱼尾婚纱：修身蕾丝，膝下散开的裙摆，优雅",
+   "colors": [
+    "白色",
+    "象牙白",
+    "香槟色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "婚纱",
+   "title": "简约缎面",
+   "shape": "aline",
+   "prompt": "简约缎面婚纱：干净的剪裁，哑光缎面，没有多余装饰",
+   "colors": [
+    "白色",
+    "象牙白",
+    "香槟色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "婚纱",
+   "title": "秀禾服",
+   "shape": "hanfu",
+   "prompt": "中式秀禾婚服：对襟立领上衣和马面裙，金线刺绣龙凤花鸟",
+   "colors": [
+    "红色",
+    "酒红色",
+    "金色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "国风",
+   "title": "汉服",
+   "shape": "hanfu",
+   "prompt": "飘逸的汉服：交领宽袖，高腰襦裙，轻薄披帛",
+   "colors": [
+    "白色",
+    "浅青色",
+    "粉色",
+    "红色",
+    "蓝色",
+    "浅紫色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "国风",
+   "title": "唐装",
+   "shape": "hanfu",
+   "prompt": "盛唐齐胸襦裙：大袖衫、齐胸长裙、印花披帛，华丽丰盈",
+   "colors": [
+    "红色",
+    "橙色",
+    "绿色",
+    "蓝色",
+    "粉色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "国风",
+   "title": "马面裙",
+   "shape": "aline",
+   "prompt": "明制马面裙配立领短衫，织金纹样，端庄",
+   "colors": [
+    "黑色",
+    "红色",
+    "墨绿色",
+    "蓝色",
+    "白色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "国风",
+   "title": "旗袍",
+   "shape": "qipao",
+   "prompt": "修身旗袍：立领盘扣，侧开衩，真丝提花面料",
+   "colors": [
+    "红色",
+    "墨绿色",
+    "蓝色",
+    "白色",
+    "黑色",
+    "香槟色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "国风",
+   "title": "改良旗袍",
+   "shape": "short",
+   "prompt": "改良旗袍短裙：立领盘扣上身，蓬松的短裙摆",
+   "colors": [
+    "粉色",
+    "浅青色",
+    "白色",
+    "红色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "和风",
+   "title": "和服",
+   "shape": "kimono",
+   "prompt": "传统和服：花卉纹样，宽幅腰带打结，袖子垂坠",
+   "colors": [
+    "红色",
+    "粉色",
+    "蓝色",
+    "紫色",
+    "黑色",
+    "白色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "和风",
+   "title": "振袖",
+   "shape": "kimono",
+   "prompt": "成人式振袖和服：长长的袖子，华丽的花卉和金箔纹样，精致腰带",
+   "colors": [
+    "红色",
+    "蓝色",
+    "粉色",
+    "黑色",
+    "绿色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "和风",
+   "title": "浴衣",
+   "shape": "kimono",
+   "prompt": "夏日浴衣：轻薄棉布，清爽的花火或花卉纹样，细腰带",
+   "colors": [
+    "白色",
+    "蓝色",
+    "粉色",
+    "黑色",
+    "紫色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "和风",
+   "title": "袴装",
+   "shape": "aline",
+   "prompt": "大正风袴装：上身花纹和服，下身高腰袴裙，配短靴",
+   "colors": [
+    "酒红色",
+    "墨绿色",
+    "蓝色",
+    "紫色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "水手服",
+   "shape": "sailor",
+   "prompt": "日系水手服：水手领、领巾、百褶裙，端正得体",
+   "colors": [
+    "蓝色",
+    "黑色",
+    "白色",
+    "灰色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "JK 制服",
+   "shape": "sailor",
+   "prompt": "日系制服：西装外套、衬衫、领结、格纹百褶裙，端正得体",
+   "colors": [
+    "蓝色",
+    "灰色",
+    "酒红色",
+    "米色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "洛丽塔",
+   "shape": "lolita",
+   "prompt": "洛丽塔洋装：蓬蓬的及膝裙，蕾丝、蝴蝶结、荷叶边，泡泡袖",
+   "colors": [
+    "粉色",
+    "黑色",
+    "蓝色",
+    "白色",
+    "酒红色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "女仆装",
+   "shape": "lolita",
+   "prompt": "经典女仆长裙：黑色长裙配白色荷叶边围裙和袖口，端庄",
+   "colors": [
+    "黑色",
+    "蓝色",
+    "酒红色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "女巫",
+   "shape": "gown",
+   "prompt": "神秘的女巫长袍裙：深色丝绒与薄纱，宽大的喇叭袖",
+   "colors": [
+    "黑色",
+    "紫色",
+    "墨绿色",
+    "酒红色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "精灵",
+   "shape": "gown",
+   "prompt": "森林精灵的轻纱长裙：叶片和藤蔓刺绣，不规则的飘逸裙摆",
+   "colors": [
+    "绿色",
+    "白色",
+    "浅青色",
+    "金色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "角色",
+   "title": "女骑士",
+   "shape": "armor",
+   "prompt": "精致的女骑士盔甲：银色雕花胸甲和护臂，下身长裙与披风",
+   "colors": [
+    "银色",
+    "金色",
+    "黑色",
+    "白色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "白衬衫",
+   "shape": "shirt",
+   "prompt": "干净的白衬衫配高腰半身裙，清爽利落",
+   "colors": [
+    "白色",
+    "浅蓝色",
+    "米色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "碎花长裙",
+   "shape": "aline",
+   "prompt": "法式碎花连衣长裙，轻盈的面料随风微动",
+   "colors": [
+    "米色",
+    "红色",
+    "蓝色",
+    "粉色",
+    "绿色",
+    "黑色"
+   ],
+   "skirt": true,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "针织裙",
+   "shape": "aline",
+   "prompt": "柔软的针织连衣裙，合身，温暖质感",
+   "colors": [
+    "米色",
+    "灰色",
+    "酒红色",
+    "黑色",
+    "棕色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "风衣",
+   "shape": "coat",
+   "prompt": "经典双排扣风衣，系腰带，垂坠挺括",
+   "colors": [
+    "卡其色",
+    "黑色",
+    "米色",
+    "灰色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "毛呢大衣",
+   "shape": "coat",
+   "prompt": "长款毛呢大衣，内搭高领毛衣",
+   "colors": [
+    "驼色",
+    "黑色",
+    "灰色",
+    "白色",
+    "红色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "西装",
+   "shape": "suit",
+   "prompt": "剪裁利落的女士西装套装",
+   "colors": [
+    "黑色",
+    "白色",
+    "灰色",
+    "米色",
+    "红色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "牛仔",
+   "shape": "shirt",
+   "prompt": "牛仔外套配白色上衣和牛仔裤",
+   "colors": [
+    "蓝色",
+    "浅蓝色",
+    "黑色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "卫衣",
+   "shape": "hoodie",
+   "prompt": "宽松的连帽卫衣，休闲舒服",
+   "colors": [
+    "灰色",
+    "黑色",
+    "白色",
+    "粉色",
+    "蓝色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "运动装",
+   "shape": "hoodie",
+   "prompt": "时尚运动套装，舒展的面料",
+   "colors": [
+    "黑色",
+    "灰色",
+    "白色",
+    "蓝色",
+    "粉色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "日常",
+   "title": "羽绒服",
+   "shape": "coat",
+   "prompt": "蓬松的长款羽绒服",
+   "colors": [
+    "白色",
+    "黑色",
+    "红色",
+    "米色",
+    "蓝色"
+   ],
+   "skirt": false,
+   "male": false
+  },
+  {
+   "group": "礼服",
+   "title": "西装礼服",
+   "shape": "suit",
+   "prompt": "合身的三件套西装，领带，挺括有型",
+   "colors": [
+    "黑色",
+    "蓝色",
+    "灰色",
+    "白色",
+    "酒红色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "礼服",
+   "title": "燕尾服",
+   "shape": "suit",
+   "prompt": "正式燕尾服配白色领结",
+   "colors": [
+    "黑色",
+    "白色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "礼服",
+   "title": "王子礼服",
+   "shape": "armor",
+   "prompt": "童话王子礼服：金色肩章和绶带、立领、精致纹饰",
+   "colors": [
+    "白色",
+    "蓝色",
+    "红色",
+    "黑色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "国风",
+   "title": "男士汉服",
+   "shape": "hanfu",
+   "prompt": "男士汉服：交领宽袖长袍，腰封玉佩，气质儒雅",
+   "colors": [
+    "白色",
+    "黑色",
+    "蓝色",
+    "墨绿色",
+    "红色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "国风",
+   "title": "中山装",
+   "shape": "suit",
+   "prompt": "挺括的中山装，立领对襟",
+   "colors": [
+    "黑色",
+    "灰色",
+    "蓝色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "国风",
+   "title": "唐装外套",
+   "shape": "shirt",
+   "prompt": "中式立领盘扣外套，提花面料",
+   "colors": [
+    "红色",
+    "黑色",
+    "蓝色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "和风",
+   "title": "男士和服",
+   "shape": "kimono",
+   "prompt": "男士和服配羽织和袴，沉稳",
+   "colors": [
+    "黑色",
+    "蓝色",
+    "灰色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "和风",
+   "title": "男士浴衣",
+   "shape": "kimono",
+   "prompt": "男士夏日浴衣，素雅条纹",
+   "colors": [
+    "蓝色",
+    "灰色",
+    "黑色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "角色",
+   "title": "骑士盔甲",
+   "shape": "armor",
+   "prompt": "精致的骑士盔甲：雕花胸甲、护臂、披风",
+   "colors": [
+    "银色",
+    "黑色",
+    "金色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "角色",
+   "title": "学院制服",
+   "shape": "suit",
+   "prompt": "英伦学院制服：西装外套、针织背心、领带",
+   "colors": [
+    "蓝色",
+    "灰色",
+    "酒红色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "日常",
+   "title": "白衬衫",
+   "shape": "shirt",
+   "prompt": "干净的白衬衫配休闲裤",
+   "colors": [
+    "白色",
+    "浅蓝色",
+    "黑色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "日常",
+   "title": "皮夹克",
+   "shape": "coat",
+   "prompt": "有型的皮夹克配深色裤子",
+   "colors": [
+    "黑色",
+    "棕色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "日常",
+   "title": "风衣",
+   "shape": "coat",
+   "prompt": "经典男士风衣，垂坠挺括",
+   "colors": [
+    "卡其色",
+    "黑色",
+    "灰色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "日常",
+   "title": "大衣",
+   "shape": "coat",
+   "prompt": "长款毛呢大衣，内搭高领毛衣",
+   "colors": [
+    "黑色",
+    "驼色",
+    "灰色"
+   ],
+   "skirt": false,
+   "male": true
+  },
+  {
+   "group": "日常",
+   "title": "卫衣",
+   "shape": "hoodie",
+   "prompt": "宽松的连帽卫衣",
+   "colors": [
+    "灰色",
+    "黑色",
+    "白色"
+   ],
+   "skirt": false,
+   "male": true
+  }
+ ]
+}

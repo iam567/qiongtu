@@ -26,6 +26,9 @@ enum class Tool(val title: String, val symbol: String) {
     SHAPE("塑形", "figure.arms.open"),
     EFFECT("特效", "sparkles.rectangle.stack"),
     GRAPHIC("形状", "square.on.circle"),
+    BODY_TONE("身体提亮", "sun.max"),
+    SMART_CROP("智能构图", "viewfinder"),
+    RETOUCH("手动消除", "bandage"),
 }
 
 /**
@@ -59,7 +62,33 @@ interface EditOp {
     /** 浮在照片上面的装饰（文字、贴纸、形状、图层）：AI 只处理下面的照片，它们一直留在最上面。 */
     val floats: Boolean get() = false
 
+    /** 滤镜、整张调色：AI 改内容时先拿下来，出结果后再盖回最上面。 */
+    val colors: Boolean get() = false
+
+    /** 美颜、美妆、美体这些：和滤镜换先后差别很小，找滤镜时可以越过它们。 */
+    val skipsColor: Boolean get() = false
+
     companion object {
+        /**
+         * AI 改内容时，把历史末尾的滤镜和整张调色先拿下来：AI 只看没调色的照片，出来以后再盖回最上面，
+         * 不然颜色会被 AI 重新算一遍，滤镜就没了。
+         * first = 发给 AI 的步骤，second = 拿下来的滤镜和调色。
+         */
+        fun splitColor(ops: List<EditOp>): Pair<List<EditOp>, List<EditOp>> {
+            val base = ArrayList<EditOp>()
+            val color = ArrayList<EditOp>()
+            var open = true
+            for (op in ops.asReversed()) {
+                when {
+                    !open -> base.add(0, op)
+                    op.colors -> color.add(0, op)
+                    op.skipsColor -> base.add(0, op)
+                    else -> { open = false; base.add(0, op) }
+                }
+            }
+            return base to color
+        }
+
         fun applyAll(ops: List<EditOp>, src: Bitmap): Bitmap = ops.fold(src) { img, op -> op.apply(img) }
 
         /**

@@ -52,6 +52,8 @@ import com.taoo.xiutu.ai.AIPresetGroup
 import com.taoo.xiutu.core.Img
 import com.taoo.xiutu.editor.EditOp
 import com.taoo.xiutu.editor.EditorModel
+import com.taoo.xiutu.editor.FaceRescue
+import com.taoo.xiutu.editor.FaceSeeker
 import com.taoo.xiutu.editor.Tool
 import com.taoo.xiutu.editor.ToolSession
 import com.taoo.xiutu.ml.FaceDetector
@@ -92,7 +94,7 @@ sealed interface SkinItem {
 }
 
 /** 皮肤：磨皮、肤色、祛皱祛痘、丰盈、提拉、眼部牙齿、修容笔。 */
-class SkinSession(model: EditorModel) : ToolSession(model, Tool.SKIN) {
+class SkinSession(model: EditorModel) : ToolSession(model, Tool.SKIN), FaceSeeker {
     var tab by mutableStateOf(SkinTab.SKIN)
         private set
     var item by mutableStateOf<SkinItem>(SkinItem.Key(SkinKey.SMOOTH))
@@ -136,9 +138,10 @@ class SkinSession(model: EditorModel) : ToolSession(model, Tool.SKIN) {
         val b = model.base ?: return
         detecting = true
         model.scope.launch {
+            val list = model.faceSearch.find()
             val found = withContext(Dispatchers.Default) {
                 runCatching {
-                    FaceDetector.detect(b).map { f ->
+                    list.map { f ->
                         // 量不出来（脸贴着画面边缘之类）就用一个常见的肤色顶上。
                         SkinFace(f, SkinEngine.measureTone(b, f) ?: SkinTone.DEFAULT)
                     }
@@ -160,7 +163,13 @@ class SkinSession(model: EditorModel) : ToolSession(model, Tool.SKIN) {
 
     // MARK: 画面上的操作
 
+    /** 涂抹和点痘不用脸，照常能点。 */
+    override val lacksFace: Boolean get() = !detecting && params.faces.isEmpty() && !item.isBrush && item != SkinItem.Heal
+
+    override fun redetectFaces() = start()
+
     override fun onTap(p: PointF) {
+        if (model.faceSearch.tap(p)) return
         if (detecting) return
         when (item) {
             SkinItem.Heal -> {
@@ -340,7 +349,10 @@ class SkinSession(model: EditorModel) : ToolSession(model, Tool.SKIN) {
                     Text("正在找人脸…", fontSize = 14.sp, color = Color.White)
                 }
             } else {
-                errorText()?.let {
+                val message = errorText()
+                if (message != null && params.faces.isEmpty()) {
+                    FaceRescue(model, "这张图里没有找到人脸")
+                } else message?.let {
                     Text(it, fontSize = 12.sp, color = WARNING, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
                 }
                 if (params.faces.size > 1) FacePicker()

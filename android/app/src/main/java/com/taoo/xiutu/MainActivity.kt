@@ -22,6 +22,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.taoo.xiutu.ai.AISettings
+import com.taoo.xiutu.ai.outfit.OutfitCatalog
+import com.taoo.xiutu.ai.outfit.WardrobeStore
+import com.taoo.xiutu.batch.BatchStyleScreen
+import com.taoo.xiutu.batch.StyleStore
 import com.taoo.xiutu.core.DraftStore
 import com.taoo.xiutu.ui.GenderSetting
 import com.taoo.xiutu.ui.Theme
@@ -54,6 +58,9 @@ class MainActivity : ComponentActivity() {
         FavoriteFaceStore.init(applicationContext)
         DraftStore.init(applicationContext)
         GenderSetting.init(applicationContext)
+        OutfitCatalog.init(applicationContext)
+        StyleStore.init(applicationContext)
+        WardrobeStore.init(applicationContext)
         setContent { XiuTuTheme { AppNav() } }
     }
 }
@@ -92,6 +99,8 @@ fun AppNav() {
                 startCover = { nav.navigate("picker/cover/none") },
                 startStudio = { nav.navigate("picker/studio/none") },
                 startManga = { nav.navigate("manga") },
+                startBatch = { nav.navigate("batch/none") },
+                startOutfits = { nav.navigate("outfits") },
                 startHistory = { nav.navigate("history") },
                 startRaw = { nav.navigate("raw") },
                 startFavorite = { nav.navigate("favoriteFace") },
@@ -160,12 +169,18 @@ fun AppNav() {
         composable("raw") {
             RawScreen(onEdit = { f -> nav.navigate("editorFile/${enc(f.absolutePath)}") }, onClose = { nav.popHome() })
         }
+        composable("batch/{style}") { e ->
+            val id = e.arguments?.getString("style")
+            BatchStyleScreen(id) { nav.popBackStack() }
+        }
+        composable("outfits") { BatchStyleScreen(null, outfitMode = true) { nav.popBackStack() } }
         composable("favoriteFace") { FavoriteFaceScreen { nav.popHome() } }
         composable("manga") { MangaScreen { nav.popHome() } }
         composable("history") {
             HistoryScreen(
                 onEdit = { f -> nav.navigate("editorFile/${enc(f.absolutePath)}") },
                 onApply = { id -> nav.navigate("picker/recipe/${enc(id)}") },
+                onBatch = { id -> nav.navigate("batch/${enc(id)}") },
                 onClose = { nav.popHome() },
             )
         }

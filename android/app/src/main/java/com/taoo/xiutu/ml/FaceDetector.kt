@@ -70,12 +70,15 @@ object FaceDetector {
         )
     }
 
+    /** 整张找一遍，找不到再分块放大找小脸。在后台线程调用。 */
+    fun detect(image: Bitmap): List<FaceInfo> = direct(image).ifEmpty { FaceFinder.deep(image) }
+
     /**
-     * 找脸。ML Kit 只给够大、最显眼的那张脸算五官轮廓（脸小于约 200 像素时一个都不给），
+     * 只整张找一遍。ML Kit 只给够大、最显眼的那张脸算五官轮廓（脸小于约 200 像素时一个都不给），
      * 所以缺轮廓的脸再单独裁出来放大找一次，坐标换回整张图。
      */
-    fun detect(image: Bitmap): List<FaceInfo> {
-        check(Looper.myLooper() != Looper.getMainLooper()) { "FaceDetector.detect 要在后台线程调用" }
+    fun direct(image: Bitmap): List<FaceInfo> {
+        check(Looper.myLooper() != Looper.getMainLooper()) { "FaceDetector.direct 要在后台线程调用" }
         val found = detectRaw(image)
         return found.map { f -> if (f.hasReliableLandmarks) f else runCatching { refine(image, f) }.getOrNull() ?: f }
     }

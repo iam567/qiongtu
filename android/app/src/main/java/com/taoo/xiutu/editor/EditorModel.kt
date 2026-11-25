@@ -154,7 +154,7 @@ class EditorModel(val context: Context) {
             displayImage = out
         }
         isBusy = false
-        saveDraft()
+        saveDraft(committed = true)
     }
 
     // MARK: 草稿箱
@@ -181,12 +181,12 @@ class EditorModel(val context: Context) {
         }
     }
 
-    /** 停手一小会儿后，把当前画面（包括还没确认的 AI 结果）存进草稿箱。 */
-    fun saveDraft() {
+    /** 停手一小会儿后，把当前画面（包括还没确认的 AI 结果）存进草稿箱。committed = 刚确认过，历史里已经有这一步了。 */
+    fun saveDraft(committed: Boolean = false) {
         val proxy = proxy ?: return
         if (!draftEnabled) return
         var all = ops
-        if (tool == Tool.AI) all = withLifted(runCatching { session?.commitOps() }.getOrNull() ?: emptyList())
+        if (tool == Tool.AI && !committed) all = withLifted(runCatching { session?.commitOps() }.getOrNull() ?: emptyList())
         if (all.isEmpty()) return
         val original = draftOriginal
         val token = DraftStore.token
@@ -207,6 +207,9 @@ class EditorModel(val context: Context) {
         if (draftEnabled) DraftStore.clear()
     }
 
+    /** 找脸：美颜、面部重塑、美妆、皮肤共用。 */
+    val faceSearch = FaceSearch(this)
+
     // MARK: 工具进出
 
     /** 打开一个新工具（不走"重新打开"）。 */
@@ -217,6 +220,14 @@ class EditorModel(val context: Context) {
         session = s
         s.start()
         return s
+    }
+
+    /** 打开 AI 修图的某一组，ready 在打开之后调用。 */
+    fun beginAI(group: AIPresetGroup, ready: (com.taoo.xiutu.ai.AISession) -> Unit) {
+        beginLifting(Tool.AI) { s ->
+            (s as? AiToolApi)?.setup(group, "", null, run = false)
+            (s as? com.taoo.xiutu.ai.AISession)?.let(ready)
+        }
     }
 
     /** 打开 AI 修图的某一组。 */
@@ -360,8 +371,12 @@ class EditorModel(val context: Context) {
     val photoOps: List<EditOp> get() = if (liftedFloating.isEmpty()) ops else EditOp.splitFloating(ops).first
 
     /** 当前历史加上新的几步；拿下过装饰时新步骤放在照片和装饰之间。 */
-    private fun withLifted(newOps: List<EditOp>): List<EditOp> =
-        if (liftedFloating.isEmpty()) ops + newOps else photoOps + newOps + liftedFloating
+    private fun withLifted(newOps: List<EditOp>): List<EditOp> {
+        val color = session?.liftedColor ?: emptyList()
+        // AI 修图拿下了滤镜和调色：新的一步放在它们下面
+        if (color.isNotEmpty() && newOps.isNotEmpty()) return EditOp.splitColor(photoOps).first + newOps + color + liftedFloating
+        return photoOps + newOps + liftedFloating
+    }
 
     /**
      * 打开工具。AI 修图 / 美颜：历史末尾的装饰先拿下来，底图换成只有照片的样子再打开，
