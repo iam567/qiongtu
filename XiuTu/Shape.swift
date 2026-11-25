@@ -207,16 +207,16 @@ enum ShapeGroup: String, CaseIterable, Identifiable {
     var items: [ShapeItem] { ShapeItem.allCases.filter { $0.group == self } }
 }
 
-/// 塑形里的各项。带 AI 的那几项本机做不好（要改姿态、要凭空画出肌肉线条），交给 AI。
+/// 塑形里的各项。本机能调的项都另有一个 AI 版（认不出人体时也能用）；还有几项本机做不好，只有 AI 版。
 enum ShapeItem: String, CaseIterable, Identifiable {
-    case waist, slimAll, aiBelly, aiTummy
-    case arm, upperArm, foreArm
-    case leg, thigh, calf, aiStraightLeg
-    case aiStraightBack, aiNeckForward, shoulderLevel
-    case swanNeck, shoulderWidth, squareShoulder, aiTrapezius, neckWidth, neckLength
-    case smallHead
-    case chest, aiChestNatural, aiChestLift
-    case hips, waistHip, aiFullHip, aiLiftHip
+    case waist, slimAll, aiWaist, aiSlimAll, aiBelly, aiTummy
+    case arm, upperArm, foreArm, aiArm, aiUpperArm, aiForeArm
+    case leg, thigh, calf, aiLeg, aiThigh, aiCalf, aiStraightLeg
+    case shoulderLevel, aiShoulderLevel, aiStraightBack, aiNeckForward
+    case swanNeck, shoulderWidth, squareShoulder, neckWidth, neckLength, aiSwanNeck, aiWideShoulder, aiNarrowShoulder, aiSquareShoulder, aiThinNeck, aiLongNeck, aiTrapezius
+    case smallHead, aiSmallHead
+    case chest, aiChest, aiChestNatural, aiChestLift
+    case hips, waistHip, aiHips, aiWaistHip, aiFullHip, aiLiftHip
 
     var id: String { rawValue }
 
@@ -250,37 +250,56 @@ enum ShapeItem: String, CaseIterable, Identifiable {
         case .waistHip: return "腰臀比"
         case .aiFullHip: return "丰臀"
         case .aiLiftHip: return "提臀"
+        case .aiWaist: return "瘦腰"
+        case .aiSlimAll: return "瘦全身"
+        case .aiArm: return "瘦手臂"
+        case .aiUpperArm: return "瘦大臂"
+        case .aiForeArm: return "瘦小臂"
+        case .aiLeg: return "瘦腿"
+        case .aiThigh: return "瘦大腿"
+        case .aiCalf: return "瘦小腿"
+        case .aiShoulderLevel: return "高低肩"
+        case .aiSwanNeck: return "天鹅颈"
+        case .aiWideShoulder: return "宽肩"
+        case .aiNarrowShoulder: return "窄肩"
+        case .aiSquareShoulder: return "直角肩"
+        case .aiThinNeck: return "细脖子"
+        case .aiLongNeck: return "长脖子"
+        case .aiSmallHead: return "小头"
+        case .aiChest: return "丰胸"
+        case .aiHips: return "美胯"
+        case .aiWaistHip: return "腰臀比"
         }
     }
 
     var symbol: String {
         switch self {
-        case .waist, .waistHip: return "arrow.right.and.line.vertical.and.arrow.left"
-        case .slimAll: return "figure.stand"
+        case .waist, .waistHip, .aiWaist, .aiWaistHip: return "arrow.right.and.line.vertical.and.arrow.left"
+        case .slimAll, .aiSlimAll: return "figure.stand"
         case .aiBelly, .aiTummy: return "circle.bottomhalf.filled"
-        case .arm, .upperArm, .foreArm: return "figure.arms.open"
-        case .leg, .thigh, .calf, .aiStraightLeg: return "figure.walk"
+        case .arm, .upperArm, .foreArm, .aiArm, .aiUpperArm, .aiForeArm: return "figure.arms.open"
+        case .leg, .thigh, .calf, .aiStraightLeg, .aiLeg, .aiThigh, .aiCalf: return "figure.walk"
         case .aiStraightBack, .aiNeckForward: return "figure.stand.line.dotted.figure.stand"
-        case .shoulderLevel: return "level"
-        case .swanNeck, .neckWidth, .neckLength: return "person.bust"
-        case .shoulderWidth: return "arrow.left.and.right"
-        case .squareShoulder, .aiTrapezius: return "rectangle.tophalf.inset.filled"
-        case .smallHead: return "person.crop.circle"
-        case .chest, .aiChestNatural, .aiChestLift: return "heart"
-        case .hips, .aiFullHip, .aiLiftHip: return "oval.portrait"
+        case .shoulderLevel, .aiShoulderLevel: return "level"
+        case .swanNeck, .neckWidth, .neckLength, .aiSwanNeck, .aiThinNeck, .aiLongNeck: return "person.bust"
+        case .shoulderWidth, .aiWideShoulder, .aiNarrowShoulder: return "arrow.left.and.right"
+        case .squareShoulder, .aiTrapezius, .aiSquareShoulder: return "rectangle.tophalf.inset.filled"
+        case .smallHead, .aiSmallHead: return "person.crop.circle"
+        case .chest, .aiChestNatural, .aiChestLift, .aiChest: return "heart"
+        case .hips, .aiFullHip, .aiLiftHip, .aiHips: return "oval.portrait"
         }
     }
 
     var group: ShapeGroup {
         switch self {
-        case .waist, .slimAll, .aiBelly, .aiTummy: return .slim
-        case .arm, .upperArm, .foreArm: return .arm
-        case .leg, .thigh, .calf, .aiStraightLeg: return .leg
-        case .aiStraightBack, .aiNeckForward, .shoulderLevel: return .posture
-        case .swanNeck, .shoulderWidth, .squareShoulder, .aiTrapezius, .neckWidth, .neckLength: return .neck
-        case .smallHead: return .head
-        case .chest, .aiChestNatural, .aiChestLift: return .chest
-        case .hips, .waistHip, .aiFullHip, .aiLiftHip: return .hip
+        case .waist, .slimAll, .aiWaist, .aiSlimAll, .aiBelly, .aiTummy: return .slim
+        case .arm, .upperArm, .foreArm, .aiArm, .aiUpperArm, .aiForeArm: return .arm
+        case .leg, .thigh, .calf, .aiLeg, .aiThigh, .aiCalf, .aiStraightLeg: return .leg
+        case .shoulderLevel, .aiShoulderLevel, .aiStraightBack, .aiNeckForward: return .posture
+        case .swanNeck, .shoulderWidth, .squareShoulder, .neckWidth, .neckLength, .aiSwanNeck, .aiWideShoulder, .aiNarrowShoulder, .aiSquareShoulder, .aiThinNeck, .aiLongNeck, .aiTrapezius: return .neck
+        case .smallHead, .aiSmallHead: return .head
+        case .chest, .aiChest, .aiChestNatural, .aiChestLift: return .chest
+        case .hips, .waistHip, .aiHips, .aiWaistHip, .aiFullHip, .aiLiftHip: return .hip
         }
     }
 

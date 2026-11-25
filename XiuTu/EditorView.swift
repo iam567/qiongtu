@@ -227,6 +227,9 @@ struct EditorView: View {
                         let h = model.addOverlay(text: "横排拉宽以后自动换行的一段文字", sticker: false)
                         model.updateOverlay(h) { $0.vertical = false; $0.lineSpacing = 0; $0.wrap = 7.3; $0.size = 0.05; $0.center = CGPoint(x: 0.3, y: 0.25) }
                     }
+                } else if name.hasPrefix("shape:"), let group = ShapeGroup(rawValue: String(name.dropFirst(6))) {
+                    handle(.shape(.shape))
+                    model.shapeState.group = group
                 } else if name == "layers+blank" {
                     model.open(.layers) { model.addBlankLayer() }
                 } else if let tool = Tool(rawValue: name) {

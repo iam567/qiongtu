@@ -603,7 +603,7 @@ struct ShapePanel: View {
             .padding(.horizontal, -16)
             HScroll {
                 HRow(spacing: 6) {
-                    ForEach(state.group.items) { item in
+                    ForEach(tiles(state)) { item in
                         let usable = item.isAI || (state.body.map { item.available(in: $0) } ?? false)
                         IconTile(symbol: item.symbol, title: item.title,
                                  selected: !item.isAI && state.item == item,
@@ -620,6 +620,13 @@ struct ShapePanel: View {
             .padding(.horizontal, -16)
             .id(state.group)
         }
+    }
+
+    /// 这个部位的各项。认不出人体、本机的项用不了时，AI 的排在前面。
+    private func tiles(_ state: ShapeState) -> [ShapeItem] {
+        let all = state.group.items
+        guard state.detected, state.body == nil else { return all }
+        return all.filter(\.isAI) + all.filter { !$0.isAI }
     }
 }
 

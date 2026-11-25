@@ -39,6 +39,25 @@ enum ShapeAI {
     static func preset(_ item: ShapeItem) -> AIPreset? {
         let prompt: String
         switch item {
+        case .aiWaist: prompt = "让腰部明显变细一些，腰线收紧，左右对称，上身和胯部的比例自然。"
+        case .aiSlimAll: prompt = "让全身整体瘦一圈：脸以外的躯干、腰、手臂、腿都按比例变细，自然协调，不要夸张。"
+        case .aiArm: prompt = "让两只手臂（大臂和小臂）变细一些，去掉松弛的赘肉，线条紧致，手的大小和位置不变。"
+        case .aiUpperArm: prompt = "让大臂（肩膀到手肘）变细一些，去掉松弛的赘肉，小臂和手不变。"
+        case .aiForeArm: prompt = "让小臂（手肘到手腕）变细一些，线条流畅，大臂和手不变。"
+        case .aiLeg: prompt = "让双腿（大腿和小腿）变细一些，线条流畅修长，腿的长度和位置、脚不变。"
+        case .aiThigh: prompt = "让大腿变细一些，去掉内侧和外侧的赘肉，小腿和腿的长度不变。"
+        case .aiCalf: prompt = "让小腿变细一些，小腿肚的肌肉块更柔和，大腿和脚不变。"
+        case .aiShoulderLevel: prompt = "改善高低肩：让左右两边肩膀一样高，肩线水平，头和手臂的姿势基本不变。"
+        case .aiSwanNeck: prompt = "让脖子更修长纤细，肩颈线条舒展优美，头的大小不变，保持自然。"
+        case .aiWideShoulder: prompt = "让肩膀稍微宽一些，左右对称，头和手臂的大小不变，保持自然。"
+        case .aiNarrowShoulder: prompt = "让肩膀稍微窄一些，左右对称，头和手臂的大小不变，保持自然。"
+        case .aiSquareShoulder: prompt = "把溜肩改成平直利落的直角肩，肩头轮廓清楚，保持自然。"
+        case .aiThinNeck: prompt = "让脖子变细一些，颈部线条干净，头和肩膀的大小不变。"
+        case .aiLongNeck: prompt = "让脖子稍微长一些，头的大小不变，比例自然。"
+        case .aiSmallHead: prompt = "让头部（包括头发）整体按比例缩小一点，头身比更好，五官和脸型不变，脖子和肩膀衔接自然，头周围露出来的背景补自然。"
+        case .aiChest: prompt = "让胸部比现在明显丰满一些，左右对称，衣服被自然撑起、褶皱合理，领口的位置和露出的范围不变，不要夸张。"
+        case .aiHips: prompt = "让胯部两侧的线条更圆润流畅，填平胯部凹陷，腰到大腿过渡自然。"
+        case .aiWaistHip: prompt = "改善腰臀比：腰细一些、臀胯稍宽一些，曲线自然，不要夸张。"
         case .aiBelly: prompt = "把腹部收平一些，腰腹线条紧致自然，衣服的褶皱保持合理。"
         case .aiTummy: prompt = "让肚子小一圈，去掉小肚腩，腰线更明显，保持自然。"
         case .aiStraightLeg: prompt = "把腿型调直，改善 O 型腿或 X 型腿，让双腿线条笔直修长，腿的长度和位置不变。"
@@ -51,11 +70,19 @@ enum ShapeAI {
         case .aiLiftHip: prompt = "把臀线提高一些，臀部更上翘紧致，保持自然。"
         default: return nil
         }
-        return AIPreset(title: item.title, symbol: item.symbol, prompt: prompt + keep)
+        // 体态类本来就要改姿势，不能再说"姿势不变"。
+        let tail = item.group == .posture
+            ? "人物长相、发型、服装的款式和颜色、背景都不变；除了上面说的体态，其余姿势不变。结果仍然是一张真实的照片。"
+            : keep
+        return AIPreset(title: item.title, symbol: item.symbol, prompt: prompt + tail)
     }
 
     /// 一键美体里的 AI 预设。
     static let looks: [AIPreset] = [
+        AIPreset(title: "自然", symbol: "figure.stand",
+                 prompt: "让身材比例稍微更好一些：腰、手臂、腿略微变细，脖子略修长，改动很轻、看不出修过。" + keep),
+        AIPreset(title: "超模", symbol: "figure.walk",
+                 prompt: "让身材接近超模比例：头身比更好，腰和四肢更细，双腿和脖子更修长，肩线平直，仍然真实自然。" + keep),
         AIPreset(title: "纤细", symbol: "figure.stand",
                  prompt: "让全身更纤细苗条一些：腰、手臂、腿都适度变细，比例自然协调，不要夸张。" + keep),
         AIPreset(title: "紧致", symbol: "figure.cooldown",
@@ -275,7 +302,7 @@ extension EditorModel {
                     self.shapeState.group = first.group
                 }
             } else if self.shapeState.mode == .preset || self.shapeState.mode == .shape {
-                self.shapeState.error = "没有识别到人体。可以改用增高、瘦身、缩放这几种手动的方式。"
+                self.shapeState.error = "没有识别到人体。可以用带 AI 的，或者改用增高、瘦身、缩放。"
             }
             self.renderShape()
         }
