@@ -519,10 +519,21 @@ enum AIRegion {
     /// 白色 = 涂抹过的区域，已经缩放到 extent。
     static func mask(strokes: [MosaicStroke], extent: CGRect, feather: Bool) -> CIImage? {
         let scale = min(1, 2048 / max(extent.width, extent.height))
+        // 羽化往外走：涂过的地方整块都是 AI 的，原来的东西不会半透明地透出来。
+        let strokes = feather ? grown(strokes, by: 0.012) : strokes
         guard let cg = maskImage(strokes: strokes,
                                  width: Int((extent.width * scale).rounded()),
                                  height: Int((extent.height * scale).rounded())) else { return nil }
         return scaled(mask: cg, to: extent, feather: feather)
+    }
+
+    /// 每一笔都加粗一点（占长边的比例）。
+    static func grown(_ strokes: [MosaicStroke], by amount: CGFloat) -> [MosaicStroke] {
+        strokes.map { s in
+            var s = s
+            if !s.erase { s.width += amount }
+            return s
+        }
     }
 
     static func scaled(mask cg: CGImage, to extent: CGRect, feather: Bool) -> CIImage {
@@ -531,7 +542,7 @@ enum AIRegion {
                                                 y: extent.height / m.extent.height))
         if feather {
             // 边缘羽化一点，AI 结果和原图的接缝才不明显。
-            let radius = max(extent.width, extent.height) * 0.006
+            let radius = max(extent.width, extent.height) * 0.0035
             m = m.clampedToExtent()
                 .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
                 .cropped(to: extent)

@@ -134,6 +134,8 @@ final class EditorModel {
     /// 这次结果是换衣服（结果面板上的说法不一样）。
     var aiResultOutfit = false
     var aiResultHair = false
+    /// 涂抹区域的结果已经按蒙版贴好（修手）：笔画不再套一遍。
+    var aiResultRegion = false
     @ObservationIgnored private var aiShift: CGVector = .zero
     /// 这条指令只该动身体的哪一块。
     var aiPart: BodyPart?
@@ -1379,7 +1381,7 @@ final class EditorModel {
             return AIEdit(result: result, strokes: [], reframed: true, soften: soften, faces: aiKeepFace ? aiFaces : [],
                           mono: aiMono, recipe: recipe)
         }
-        return AIEdit(result: result, strokes: aiStrokes, frame: aiFrame, ellipse: aiEllipse, strength: aiStrength,
+        return AIEdit(result: result, strokes: aiResultRegion ? [] : aiStrokes, frame: aiFrame, ellipse: aiEllipse, strength: aiStrength,
                       toneOnly: aiToneOnly && tool == .ai, soften: soften,
                       faces: aiKeepFace && tool == .ai ? aiFaces : [],
                       changedOnly: aiCanKeepRest && aiChangedOnly && tool == .ai, area: aiArea, core: aiCore, outside: aiResultHair, shift: aiShift,
@@ -1544,6 +1546,13 @@ final class EditorModel {
             launchAI(prompt: prompt, strokes: [], crop: nil, guidance: true, identity: aiFaceCrop)
             return
         }
+        if aiPresetTitle == "修手", let region = handRegion() {
+            // 修手：涂过的地方整块换，外面一圈里变了的（旧手露出来的边）也换，其余用原图。
+            aiFrame = nil
+            let hint = "\n\nThis is a cropped part of a larger photo. Keep the same framing, position and scale so it can be placed back."
+            launchAI(prompt: prompt + hint, strokes: [], crop: crop, guidance: false, region: region)
+            return
+        }
         // 涂了区域：只把这一块（带一圈周围环境）裁出来发给 AI，结果也只贴回涂抹的范围。
         aiFrame = crop
         if AIIntent.replacesContent(prompt) {
@@ -1554,6 +1563,31 @@ final class EditorModel {
             let hint = "\n\nThis is a cropped part of a larger photo. Apply the instruction to what is shown here and keep the same framing, position and scale so it can be placed back."
             launchAI(prompt: prompt + hint, strokes: [], crop: crop, guidance: true, identity: aiFaceCrop)
         }
+    }
+
+    /// 修手用的两张蒙版：core = 涂过的地方（略大一点），area = 再往外一圈。
+    private func handRegion() -> (area: CGImage, core: CGImage)? {
+        let size = pixelSize()
+        let long = max(size.width, size.height)
+        var box: CGRect?
+        for stroke in aiStrokes where !stroke.erase {
+            for p in stroke.points {
+                let h = stroke.width / 2
+                let r = CGRect(x: p.x * size.width / long - h, y: p.y * size.height / long - h, width: stroke.width, height: stroke.width)
+                box = box?.union(r) ?? r
+            }
+        }
+        guard let b = box else { return nil }
+        let reach = min(max(b.width, b.height), 0.4)
+        func image(_ grow: CGFloat, _ blur: CGFloat) -> CGImage? {
+            let k = 1280 / long
+            guard let cg = AIRegion.maskImage(strokes: AIRegion.grown(aiStrokes, by: grow), width: max(1, Int(size.width * k)), height: max(1, Int(size.height * k))) else { return nil }
+            let m = CIImage(cgImage: cg, options: [.colorSpace: NSNull()])
+            let s = m.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blur * 1280]).cropped(to: m.extent)
+            return Renderer.shared.context.createCGImage(s, from: m.extent, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
+        }
+        guard let core = image(reach * 0.2, reach * 0.015), let area = image(reach * 0.6, reach * 0.04) else { return nil }
+        return (area, core)
     }
 
     /// 涂抹范围的外接框，四周留出余量，限制在图片内（归一化坐标）。
@@ -1569,7 +1603,8 @@ final class EditorModel {
             }
         }
         guard var b = box else { return nil }
-        let margin = max(max(b.width, b.height) * 0.35, long * 0.06)
+        // 修手要看到旧手露在外面的边，多留一些。
+        let margin = max(max(b.width, b.height) * (aiPresetTitle == "修手" ? 0.6 : 0.35), long * 0.06)
         b = b.insetBy(dx: -margin, dy: -margin)
         // 太细长的框补成不超过 2.5:1，接口对比例有限制。
         if b.width > b.height * 2.5 { b = b.insetBy(dx: 0, dy: -(b.width / 2.5 - b.height) / 2) }
@@ -1594,7 +1629,7 @@ final class EditorModel {
     /// identity = true：必须还是同一个人的任务。画质设成"自动"时改用高画质，并要求尽量忠实于原图。
     private func launchAI(prompt: String, strokes: [MosaicStroke], crop: CGRect?, guidance: Bool, identity: Bool = false,
                           reframe: AIReframe = .original, references: [UIImage] = [], recomposed: Bool = false,
-                          outfit: Bool = false, overflow: Bool = false, hair: Bool = false) {
+                          outfit: Bool = false, overflow: Bool = false, hair: Bool = false, region: (area: CGImage, core: CGImage)? = nil) {
         guard let proxy, let started = tool else { return }
         guard var endpoint = AISettings.shared.endpoint() else {
             aiError = "还没有设置 \(AISettings.shared.active.shortTitle) 的 API Key。"
@@ -1627,11 +1662,12 @@ final class EditorModel {
         aiCore = nil
         aiResultOutfit = false
         aiResultHair = false
+        aiResultRegion = false
         wardrobeSaved = nil
         aiShift = .zero
         aiUsageText = nil
         // 整张重画、还是同一个人的这几组：出来以后把原图的脸贴回去。
-        let whole = outfit || hair
+        let whole = outfit || hair || region != nil
         var before = started == .ai && whole ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty
             && [.master, .camera, .compose, .light, .body].contains(aiGroup) ? baseUIImage?.cgImage : nil
         // 只动一部分的这两组：没动的地方用原图。
@@ -1718,6 +1754,7 @@ final class EditorModel {
                         (area, core) = OutfitMask.masks(original: part, ai: image, overflow: overflow, keepHead: still)
                         if still { faces = [] }
                     }
+                    if let region { (area, core) = (region.area, region.core) }
                     if hair, let part { area = OutfitMask.hairArea(original: part, ai: image, crop: crop) }
                     return (faces, MonoCheck.isMono(image), shift, area, core)
                 }.value
@@ -1731,6 +1768,7 @@ final class EditorModel {
                 self.aiCore = found.4
                 self.aiResultOutfit = outfit
                 self.aiResultHair = hair
+                self.aiResultRegion = region != nil
                 if whole { self.aiFrame = nil }
                 self.aiCanKeepRest = part != nil
                 self.aiUsageText = usage?.summary

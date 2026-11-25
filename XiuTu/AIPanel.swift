@@ -354,7 +354,7 @@ struct AIPanel: View {
             }
             if model.aiCanKeepRest, !model.aiToneOnly {
                 HStack(spacing: 8) {
-                    Chip(title: model.aiResultHair ? "只换头发" : model.aiResultOutfit ? "只换衣服" : "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
+                    Chip(title: model.aiResultRegion ? "只改这一块" : model.aiResultHair ? "只换头发" : model.aiResultOutfit ? "只换衣服" : "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
                     Chip(title: "完整采用 AI 图", selected: !model.aiChangedOnly) { model.setAIChangedOnly(false) }
                     Spacer()
                 }
