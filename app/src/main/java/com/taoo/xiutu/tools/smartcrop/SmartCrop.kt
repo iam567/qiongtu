@@ -91,6 +91,10 @@ object SmartCrop {
         return out
     }
 
+    /** 回复里的一段文字（不是字符串就是空）。 */
+    fun text(reply: String, start: String, key: String): String =
+        ((jsonIn(reply, "{\"$start\"") as? JsonObject)?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ""
+
     /** 读一组框（找脸用）。 */
     fun boxes(text: String, key: String): List<CropRect> {
         val dict = jsonIn(text, "{\"$key\"") as? JsonObject ?: return emptyList()

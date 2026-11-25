@@ -141,9 +141,14 @@ class FaceSearch(private val model: EditorModel) {
         }
     }
 
-    private fun use(faces: List<FaceInfo>) {
+    /** 记住这几张脸（画布大小没变就一直用）。 */
+    fun keep(faces: List<FaceInfo>) {
         forced = faces
         forcedSize = baseSize()
+    }
+
+    private fun use(faces: List<FaceInfo>) {
+        keep(faces)
         (model.session as? FaceSeeker)?.redetectFaces()
     }
 }

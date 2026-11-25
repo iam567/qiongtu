@@ -131,6 +131,7 @@ fun BatchStyleScreen(styleID: String?, onClose: () -> Unit) {
                 Modifier.fillMaxWidth().background(Theme.panel).padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                model.error?.let { Text(it, fontSize = 12.sp, lineHeight = 17.sp, color = warnRed, modifier = Modifier.fillMaxWidth()) }
                 StyleRow(
                     model,
                     onAdd = { stylePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
@@ -152,7 +153,6 @@ fun BatchStyleScreen(styleID: String?, onClose: () -> Unit) {
                 if (model.spent > 0) {
                     Text("已花费约 $" + String.format(Locale.US, "%.2f", model.spent), fontSize = 11.sp, color = Theme.accent, modifier = Modifier.fillMaxWidth())
                 }
-                model.error?.let { Text(it, fontSize = 12.sp, lineHeight = 17.sp, color = warnRed, modifier = Modifier.fillMaxWidth()) }
             }
         }
         toast?.let { Toast(it, Modifier.align(Alignment.BottomCenter).padding(bottom = 290.dp)) }

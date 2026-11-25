@@ -813,13 +813,14 @@ class AISession(model: EditorModel) : ToolSession(model, Tool.AI), AiToolApi {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Header()
+            // 出错放在最上面：下面的格子多，放底下会被挤到看不见。
+            AIFailureView(if (running) null else error) { retryAI() }
             when {
                 !AISettings.isConfigured(AISettings.active) -> NeedsKeyView(openSettings = ::openSettings)
                 running -> Running()
                 hasResult -> ResultControls()
                 else -> ComposeControls()
             }
-            AIFailureView(if (running) null else error) { retryAI() }
         }
     }
 

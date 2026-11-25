@@ -272,6 +272,7 @@ class SmartCropSession(model: EditorModel) : ToolSession(model, Tool.SMART_CROP)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 ProviderMenu({ model.showSettings = true }, compact = true)
             }
+            AIFailureView(if (running) null else error) { run() }
             when {
                 !AISettings.isConfigured(AISettings.active) && items.isEmpty() -> NeedsKeyView { model.showSettings = true }
                 running -> Running()
@@ -280,7 +281,6 @@ class SmartCropSession(model: EditorModel) : ToolSession(model, Tool.SMART_CROP)
             }
             usage?.let { Text(it, fontSize = 11.sp, color = Theme.accent, modifier = Modifier.fillMaxWidth()) }
             note?.let { Text(it, fontSize = 12.sp, color = Theme.accent, modifier = Modifier.fillMaxWidth()) }
-            AIFailureView(if (running) null else error) { run() }
         }
     }
 

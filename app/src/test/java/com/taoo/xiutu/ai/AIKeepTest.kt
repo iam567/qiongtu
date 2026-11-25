@@ -183,4 +183,17 @@ class AIKeepTest {
         assertTrue(arm.part == null && "只改上面说的部位" !in arm.prompt)
         assertTrue("其余姿势不变" in ShapeAI.preset(ShapeItem.AI_STRAIGHT_BACK)!!.prompt)
     }
+
+    /** 修完的脸像不像原来：整体变亮、对比变了照样算像；换了样子不像。 */
+    @Test fun faceLikeness() {
+        val r = Random(5)
+        val a = DoubleArray(576) { 120 + 50 * sin(it % 24 * 0.5) * cos(it / 24 * 0.4) }
+        assertTrue(FaceCheck.correlation(a, DoubleArray(576) { a[it] * 1.1 + 12 + r.nextDouble() * 4 }) > 0.95)
+        assertTrue(FaceCheck.correlation(a, DoubleArray(576) { 120 + 50 * cos(it % 24 * 0.5 + 1.2) }) < 0.6)
+        assertEquals(1.0, FaceCheck.correlation(DoubleArray(576) { 9.0 }, a), 0.0)
+        val reply = "<think>嗯</think>```json\n{\"faces\":[{\"box\":[300,200,700,800]}],\"desc\":\"head tilted left\"}\n```"
+        assertEquals("head tilted left", SmartCrop.text(reply, "faces", "desc"))
+        assertEquals("", SmartCrop.text("看不清", "faces", "desc"))
+        assertTrue(FaceCheck.DESCRIBE_PROMPT.lines().none { it.startsWith(" ") })
+    }
 }

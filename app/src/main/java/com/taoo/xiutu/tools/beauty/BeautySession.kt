@@ -38,6 +38,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.taoo.xiutu.ai.AIClient
+import com.taoo.xiutu.tools.smartcrop.SmartCrop
+import com.taoo.xiutu.tools.crop.CropRect
+import com.taoo.xiutu.core.Img
+import com.taoo.xiutu.ai.AIOneShot
+import com.taoo.xiutu.ai.FaceCheck
 import com.taoo.xiutu.ai.AIEdit
 import com.taoo.xiutu.ai.AIError
 import com.taoo.xiutu.ai.AIFailureView
@@ -150,6 +155,9 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
         }
     }
 
+    /** 小脸、糊脸：AI 说的"原来长什么样"，按第几张脸记。 */
+    private val described = HashMap<Int, String>()
+
     override fun start() {
         detectFaces()
     }
@@ -179,6 +187,7 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
             val found = model.faceSearch.find()
             if (closed) return@launch
             faces = found
+            described.clear()
             faceStates.clear()
             beauty = beauty.copy(faces = found.firstOrNull()?.let { listOf(it) } ?: emptyList())
             faceIndex = 0
@@ -368,6 +377,11 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
         }
         val b = model.base ?: return
         val face = faces[faceIndex]
+        if (faceIndex !in described && needsDescription(face)) {
+            // 脸太小、太糊、认不出五官：先让 AI 看清原来的样子，框也按它指的校准，再去修，免得修成别人。
+            describeFace(face, faceIndex) { runFaceAI(style, force, references) }
+            return
+        }
         val w = b.width.toFloat()
         val h = b.height.toFloat()
         val crop = faceFrame(face, 2.0f)
@@ -380,8 +394,68 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
         frame = crop
         ellipse = ell
         pendingFaceKey = key
-        launchAI(BeautyStyle.preamble + " " + style.prompt, crop, references)
+        // 原来的样子写清楚，AI 不许改。
+        val desc = described[faceIndex].orEmpty()
+        val known = if (desc.isEmpty()) "" else " The person currently looks like this and must stay exactly so: $desc" +
+            " The source is small and slightly blurry: restore it conservatively, never invent a different face."
+        launchAI(BeautyStyle.preamble + " " + style.prompt + known, crop, references)
     }
+
+    /** 这张脸要不要先让 AI 看清楚：五官认不出，或者原图里脸宽不到 220 像素。 */
+    private fun needsDescription(face: FaceInfo): Boolean {
+        if (AISettings.endpoint() == null) return false
+        val b = model.base ?: return false
+        val full = model.source?.let { max(it.width, it.height) } ?: 0
+        val pixels = face.box.width() * b.width / max(b.width, b.height) * full
+        return !face.hasReliableLandmarks || pixels < 220
+    }
+
+    private fun describeFace(face: FaceInfo, index: Int, next: () -> Unit) {
+        val endpoint = AISettings.endpoint()
+        val proxy = model.proxy
+        if (endpoint == null || proxy == null) return next()
+        val crop = faceFrame(face, 3f)
+        val ops = model.photoOps
+        error = null
+        running = true
+        started = System.currentTimeMillis()
+        val gen = ++generation
+        job = model.scope.launch {
+            var desc = ""
+            var box: CropRect? = null
+            try {
+                val jpeg = withContext(Dispatchers.Default) {
+                    Img.jpeg(AIOneShot.prepared(piece(EditOp.applyAll(ops, proxy), crop), 1024), 90)
+                }
+                val text = AIClient.look(endpoint, FaceCheck.DESCRIBE_PROMPT, jpeg)
+                desc = SmartCrop.text(text, "faces", "desc").take(500)
+                // 挑离原来那个位置最近的框。
+                box = SmartCrop.boxes(text, "faces").minByOrNull { hypot(it.x + it.w / 2 - 0.5f, it.y + it.h / 2 - 0.5f) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // 看不了图也照常修，只是少了这句描述。
+                e.printStackTrace()
+            }
+            if (closed || gen != generation) return@launch
+            running = false
+            described[index] = desc
+            val found = box
+            if (found != null && !face.hasReliableLandmarks && found.w > 0.1f && index in faces.indices) {
+                val moved = RectF(
+                    crop.left + found.x * crop.width(), crop.top + found.y * crop.height(),
+                    crop.left + found.maxX * crop.width(), crop.top + found.maxY * crop.height(),
+                )
+                faces = faces.mapIndexed { i, f -> if (i == index) FaceInfo(box = moved) else f }
+                model.faceSearch.keep(faces)
+                updateFocus()
+            }
+            next()
+        }
+    }
+
+    /** 裁出画面里的一块（归一化），最长 1200。 */
+    private fun piece(image: Bitmap, crop: RectF) = Img.downscale(Img.cropNormalized(image, crop), 1200)
 
     /** 对当前显示的这个风格重新生成一次（会再调用一次接口）。 */
     fun regenerateFaceAI() {
@@ -435,6 +509,11 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
                 val image = AIRunner.run(endpoint, prompt, proxy, ops, emptyList(), crop, appendGuidance = false, references = references)
                 // 用量 AIClient 已经记过了，这里只取来显示
                 val usage = AIClient.takeLastUsage()
+                // 修完的脸和原来对不上（画成别人、换了姿势）就不采用。
+                val same = withContext(Dispatchers.Default) {
+                    runCatching { FaceCheck.matches(piece(EditOp.applyAll(ops, proxy), crop), image) }.getOrDefault(true)
+                }
+                if (!same) throw AIError("AI 这次把脸画成了别人，没有采用。可以再点一次；脸太小太糊的话，先用 AI 修复里的“增强画质”。")
                 if (closed || gen != generation) return@launch
                 usageText = usage?.summary
                 result = image
@@ -474,6 +553,7 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
                 Spacer(Modifier.weight(1f))
                 if (mode == Mode.AI) ProviderMenu(::openSettings, compact = true)
             }
+            AIFailureView(if (running) null else error) { retryAI() }
             when {
                 detectingFaces -> Row(
                     Modifier.fillMaxWidth().padding(vertical = 26.dp),
@@ -489,7 +569,6 @@ class BeautySession(model: EditorModel) : ToolSession(model, Tool.BEAUTY), ModeS
                     if (mode == Mode.AI) AISection() else ManualSection()
                 }
             }
-            AIFailureView(if (running) null else error) { retryAI() }
         }
     }
 

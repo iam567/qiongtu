@@ -429,6 +429,8 @@ class Handler(BaseHTTPRequestHandler):
         """看图的回答：智能构图要 crops，找脸要 faces。"""
         if "faces" in prompt:
             data = {"faces": [{"box": [420, 180, 560, 360]}]}
+            if "desc" in prompt:
+                data["desc"] = "head upright, facing the camera, eyes open, calm expression, straight bangs"
         else:
             data = {"crops": self.CROPS}
         return "<think>先看看 {画面}</think>\n```json\n" + json.dumps(data, ensure_ascii=False) + "\n```"
