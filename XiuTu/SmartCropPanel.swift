@@ -65,6 +65,7 @@ struct SmartCropPanel: View {
                 Spacer(minLength: 0)
                 ProviderMenu(openSettings: openSettings, compact: true)
             }
+            AIFailureView(message: state.error) { model.runSmartCrop() }
             if !settings.isConfigured(settings.active), state.items.isEmpty {
                 NeedsKeyView(openSettings: openSettings)
             } else if state.running {
@@ -97,7 +98,6 @@ struct SmartCropPanel: View {
             if let note = state.note {
                 Text(note).font(.system(size: 12)).foregroundStyle(Theme.accent).frame(maxWidth: .infinity, alignment: .leading)
             }
-            AIFailureView(message: state.error) { model.runSmartCrop() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)

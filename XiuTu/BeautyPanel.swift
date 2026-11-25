@@ -98,6 +98,7 @@ struct BeautyPanel: View {
                 Spacer()
                 if model.beautyMode == .ai { ProviderMenu(openSettings: openSettings, compact: true) }
             }
+            AIErrorView(model: model)
             if model.detectingFaces {
                 HStack(spacing: 10) {
                     ProgressView().tint(.white)
@@ -111,7 +112,6 @@ struct BeautyPanel: View {
                 if model.faces.count > 1 { facePicker }
                 if model.beautyMode == .ai { aiSection } else { manualSection }
             }
-            AIErrorView(model: model)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)

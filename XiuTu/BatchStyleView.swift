@@ -206,6 +206,13 @@ struct BatchStyleView: View {
 
     private var panel: some View {
         VStack(spacing: 12) {
+            if let error = model.error {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             styles
             photos
             if !model.items.isEmpty, model.doneCount > 0 {
@@ -226,13 +233,6 @@ struct BatchStyleView: View {
             if model.spent > 0 {
                 Text("已花费约 $\(String(format: "%.2f", model.spent))")
                     .font(.system(size: 11)).monospacedDigit().foregroundStyle(Theme.accent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if let error = model.error {
-                Text(error)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

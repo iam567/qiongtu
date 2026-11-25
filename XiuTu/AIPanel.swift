@@ -61,6 +61,8 @@ struct AIPanel: View {
     var body: some View {
         VStack(spacing: 10) {
             header
+            // 出错放在最上面：下面的格子多，放底下会被挤到看不见。
+            AIErrorView(model: model)
             if !settings.isConfigured(settings.active) {
                 needsKey
             } else if model.aiRunning {
@@ -70,7 +72,6 @@ struct AIPanel: View {
             } else {
                 compose
             }
-            AIErrorView(model: model)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
