@@ -34,7 +34,11 @@ enum ShapeMode: String, CaseIterable, Identifiable {
 
 /// 一键美体和塑形里交给 AI 做的那几项。
 enum ShapeAI {
-    private static let keep = "人物长相、发型、姿势、服装的款式和颜色、背景都不变，结果仍然是一张真实的照片。"
+    private static let keep = "人物长相、发型、姿势、服装的款式和颜色、背景都不变，画面不要移动、裁切或缩放；皮肤保留毛孔和真实质感，不磨皮、不涂抹。结果仍然是一张真实的照片。"
+
+    /// 只动一个部位时的限制：AI 常顺手把别处也改了（衣服变短、多出肚脐、换了手的样子）。
+    private static let only = "只改上面说的部位，其余部位和原照片完全一样：不要让衣服变短、变紧或多露出皮肤，" +
+        "不要凭空画出肚脐、腹肌线、锁骨线、纹身、首饰或新的褶皱，手、头发、腰腹和背景都不动。"
 
     static func preset(_ item: ShapeItem) -> AIPreset? {
         let prompt: String
@@ -74,7 +78,7 @@ enum ShapeAI {
         let tail = item.group == .posture
             ? "人物长相、发型、服装的款式和颜色、背景都不变；除了上面说的体态，其余姿势不变。结果仍然是一张真实的照片。"
             : keep
-        return AIPreset(title: item.title, symbol: item.symbol, prompt: prompt + tail)
+        return AIPreset(title: item.title, symbol: item.symbol, prompt: prompt + (item.part == nil ? "" : item.part == .waist ? only.replacingOccurrences(of: "手、头发、腰腹和背景都不动", with: "手、头发和背景都不动") : only) + tail, part: item.part)
     }
 
     /// 一键美体里的 AI 预设。

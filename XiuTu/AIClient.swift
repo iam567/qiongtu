@@ -92,6 +92,13 @@ enum AIClient {
         Task { @MainActor in AISettings.shared.addUsage(usage) }
     }
 
+    /// 看图、只回文字的请求：记用量。
+    static func noteLook(_ endpoint: AIEndpoint, model: String, input: Int, output: Int) {
+        guard input + output > 0 else { return }
+        finish(AIUsage(model: model, inputText: input, inputImage: 0, output: output, provider: endpoint.provider,
+                       outputText: output, images: 0))
+    }
+
     /// OpenAI 这一类的 usage：input_tokens / output_tokens，外加 input_tokens_details 里的文字和图片拆分。
     private static func record(_ json: [String: Any], endpoint: AIEndpoint, images: Int = 1) {
         let usage = json["usage"] as? [String: Any]
@@ -104,11 +111,11 @@ enum AIClient {
         finish(u, report: usage != nil)
     }
 
-    private static func int(_ value: Any?) -> Int { (value as? NSNumber)?.intValue ?? 0 }
+    static func int(_ value: Any?) -> Int { (value as? NSNumber)?.intValue ?? 0 }
 
     private static func double(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
 
-    private static func url(_ endpoint: AIEndpoint, _ path: String) throws -> URL {
+    static func url(_ endpoint: AIEndpoint, _ path: String) throws -> URL {
         var base = endpoint.baseURL
         while base.hasSuffix("/") { base.removeLast() }
         guard let url = URL(string: base + path), url.scheme != nil else {
@@ -117,7 +124,7 @@ enum AIClient {
         return url
     }
 
-    private static func jsonRequest(_ endpoint: AIEndpoint, _ path: String, body: [String: Any]) throws -> URLRequest {
+    static func jsonRequest(_ endpoint: AIEndpoint, _ path: String, body: [String: Any]) throws -> URLRequest {
         var request = URLRequest(url: try url(endpoint, path))
         request.httpMethod = "POST"
         request.setValue("Bearer \(endpoint.key)", forHTTPHeaderField: "Authorization")
@@ -381,7 +388,7 @@ enum AIClient {
     }
 
     /// 在返回的 JSON 里找出所有图片块和文字块，不依赖具体层级。
-    private static func collect(_ value: Any, images: inout [String], texts: inout [String]) {
+    static func collect(_ value: Any, images: inout [String], texts: inout [String]) {
         if let dict = value as? [String: Any] {
             let type = dict["type"] as? String
             if type == "image", let data = dict["data"] as? String {
@@ -745,7 +752,7 @@ enum AIClient {
 
     // MARK: 通用
 
-    private static func send(_ request: URLRequest, provider: AIProvider) async throws -> [String: Any] {
+    static func send(_ request: URLRequest, provider: AIProvider) async throws -> [String: Any] {
         let data: Data
         let response: URLResponse
         do {

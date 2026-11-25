@@ -31,7 +31,7 @@ final class MacSession {
     /// 菜单栏里点了漫画人生 / 满意脸型。
     var page: Page?
 
-    enum Page { case manga, faces }
+    enum Page: Equatable { case manga, faces, batch(UUID?) }
 
     private init() {}
 }
@@ -48,11 +48,12 @@ struct MacRootView: View {
         case studio(URL, id: UUID)
         case manga
         case faces
+        case batch(UUID?, id: UUID)
         case draft
 
         var isEditing: Bool {
             switch self {
-            case .editor, .stitch, .raw, .cover, .studio, .manga, .draft: return true
+            case .editor, .stitch, .raw, .cover, .studio, .manga, .batch, .draft: return true
             default: return false
             }
         }
@@ -176,6 +177,7 @@ struct MacRootView: View {
                 Color.clear.frame(height: 28)
                 HistoryView(onEdit: { url in screen = .editor(url, recipe: nil, id: UUID()) },
                             onApply: { id in session.importing = .recipe(id) },
+                            onBatch: { id in show(.batch(id)) },
                             onClose: close)
             }
             .background(Theme.bg)
@@ -187,6 +189,8 @@ struct MacRootView: View {
             MangaView(onClose: close)
         case .faces:
             FavoriteFaceView(onClose: close)
+        case .batch(let style, let id):
+            BatchStyleView(styleID: style, onClose: close).id(id)
         case .draft:
             EditorView(assetID: "", restoreDraft: true, initialTool: nil) { close() }
         }
@@ -198,7 +202,11 @@ struct MacRootView: View {
             note = "先把现在这张导出，或者返回放弃修改"
             return
         }
-        screen = page == .manga ? .manga : .faces
+        switch page {
+        case .manga: screen = .manga
+        case .faces: screen = .faces
+        case .batch(let style): screen = .batch(style, id: UUID())
+        }
     }
 
     /// 启动时看看草稿箱：上次编辑到一半退出了，就问要不要接着编辑。从 Finder 打开文件进来的不问。
@@ -301,6 +309,7 @@ struct MacRootView: View {
             case "studio": purpose = .studio
             case "manga": screen = .manga
             case "faces": screen = .faces
+            case "batch": screen = .batch(nil, id: UUID())
             default: break
             }
         }
@@ -310,7 +319,7 @@ struct MacRootView: View {
             switch screen {
             case .cover: purpose = .cover
             case .studio: purpose = .studio
-            case .manga, .faces:
+            case .manga, .faces, .batch:
                 session.dropped = files
                 return
             default: break
@@ -392,6 +401,7 @@ struct MacStartView: View {
 
     private let history = HistoryStore.shared
     private let settings = AISettings.shared
+    @State private var saved: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -402,6 +412,20 @@ struct MacStartView: View {
             recent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(MacTheme.panel)
+                .overlay(alignment: .bottom) {
+                    if let saved {
+                        Text(saved)
+                            .font(.system(size: 13, weight: .medium))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(Color(white: 0.24), in: Capsule())
+                            .padding(.bottom, 30)
+                            .task(id: saved) {
+                                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                self.saved = nil
+                            }
+                    }
+                }
         }
     }
 
@@ -428,6 +452,7 @@ struct MacStartView: View {
             sideButton("封神…", symbol: "crown") { onOpen(.cover) }
             sideButton("摄影棚…", symbol: "camera") { onOpen(.studio) }
             sideButton("漫画人生", symbol: "book.pages") { onPage(.manga) }
+            sideButton("统一风格", symbol: "square.stack.3d.down.right") { onPage(.batch(nil)) }
             Rectangle().fill(MacTheme.line).frame(height: 1).padding(.vertical, 8)
             sideButton(history.hasPassword ? "历史图库（已加密）" : "历史图库", symbol: "photo.stack", action: onHistory)
             sideButton("满意脸型", symbol: "star") { onPage(.faces) }
@@ -503,6 +528,15 @@ struct MacStartView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 18)], spacing: 22) {
                         ForEach(items) { item in
                             MacRecentTile(item: item) { onRecent(history.fileURL(item)) }
+                                .contextMenu {
+                                    Button("打开") { onRecent(history.fileURL(item)) }
+                                    Button("保存此风格") {
+                                        Task { saved = await StyleStore.shared.add(file: history.fileURL(item)) != nil ? "已保存此风格" : "保存失败" }
+                                    }
+                                    Button("用此风格批量处理…") {
+                                        Task { if let style = await StyleStore.shared.add(file: history.fileURL(item)) { onPage(.batch(style.id)) } }
+                                    }
+                                }
                         }
                     }
                     .padding(.horizontal, 28)
@@ -563,6 +597,7 @@ struct MacCommands: Commands {
             Button("封神…") { MacSession.shared.importing = .cover }
             Button("摄影棚…") { MacSession.shared.importing = .studio }
             Button("漫画人生") { MacSession.shared.page = .manga }
+            Button("统一风格") { MacSession.shared.page = .batch(nil) }
             Button("满意脸型") { MacSession.shared.page = .faces }
         }
         CommandGroup(replacing: .saveItem) {

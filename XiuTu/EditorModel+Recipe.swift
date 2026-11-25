@@ -72,6 +72,7 @@ extension EditorModel {
         guard tool == .ai else { return false }
         aiPresetTitle = r.presetTitle
         aiMasterCompose = r.masterCompose
+        aiMasterFrame = r.masterFrame
         aiFaceCrop = r.faceCrop
         aiHairCrop = r.hairCrop
         aiReframe = AIReframe(rawValue: r.reframe) ?? .original
@@ -85,6 +86,8 @@ extension EditorModel {
         aiStrength = r.strength
         aiToneOnly = r.toneOnly
         aiSoften = r.soften
+        aiKeepFace = r.keepFace ?? aiKeepFace
+        aiChangedOnly = r.changedOnly ?? aiChangedOnly
         renderAI()
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
             commitTool { done.resume() }

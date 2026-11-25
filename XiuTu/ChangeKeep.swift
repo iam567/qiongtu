@@ -1,0 +1,95 @@
+import CoreImage
+import Vision
+
+/// AI 改完的图，只在真正变了的地方用 AI 的像素，其余用原图的：
+/// 没动的地方保持原来的清晰度和质感，不会整张都是 AI 重画出来的涂抹感。
+enum ChangeKeep {
+    private static let diffKernel = CIColorKernel(source: """
+    kernel vec4 changed(__sample a, __sample b) {
+        vec3 d = abs(a.rgb - b.rgb);
+        float v = max(d.r, max(d.g, d.b));
+        float m = smoothstep(0.045, 0.12, v);
+        return vec4(m, m, m, 1.0);
+    }
+    """)
+
+    /// area：只允许在这一块里换（白 = 允许），不给就整张都可以。
+    static func apply(original: CIImage, ai: CIImage, area: CIImage?) -> CIImage {
+        let extent = original.extent
+        let long = max(extent.width, extent.height)
+        func soft(_ image: CIImage, _ radius: CGFloat) -> CIImage {
+            image.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius]).cropped(to: extent)
+        }
+        // AI 常把整张的明暗颜色带偏一点：先按大范围拉回原图的样子，再比较、再贴。
+        let toned = ToneTransfer.apply(original: ai, graded: original, radius: long * 0.05)
+        let sigma = long * 0.0028
+        guard let diff = diffKernel?.apply(extent: extent, arguments: [soft(original, sigma), soft(toned, sigma)]) else { return ai }
+        // 去掉零星的小点，再往外扩一点、羽化，接缝落在没变的地方。
+        var mask = diff
+            .clampedToExtent()
+            .applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: long * 0.0012])
+            .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: long * 0.009])
+            .cropped(to: extent)
+        mask = soft(mask, long * 0.005)
+        if let area {
+            mask = mask.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: area]).cropped(to: extent)
+        }
+        return toned.applyingFilter("CIBlendWithMask", parameters: [
+            kCIInputBackgroundImageKey: original,
+            kCIInputMaskImageKey: mask,
+        ]).cropped(to: extent)
+    }
+
+    /// AI 图相对原图整体偏了多少（占宽高的比例）。偏得太多就不管（说明不是简单的平移）。
+    static func shift(original: CGImage, ai: CGImage) -> CGVector {
+        func small(_ image: CGImage) -> CGImage? {
+            let k = 768 / CGFloat(max(original.width, original.height))
+            let w = max(1, Int(CGFloat(original.width) * k)), h = max(1, Int(CGFloat(original.height) * k))
+            guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+            ctx.interpolationQuality = .high
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return ctx.makeImage()
+        }
+        guard let a = small(original), let b = small(ai) else { return .zero }
+        let request = VNTranslationalImageRegistrationRequest(targetedCGImage: b)
+        #if targetEnvironment(simulator)
+        request.usesCPUOnly = true
+        #endif
+        guard (try? VNImageRequestHandler(cgImage: a, options: [:]).perform([request])) != nil,
+              let t = (request.results?.first as? VNImageTranslationAlignmentObservation)?.alignmentTransform else { return .zero }
+        // alignmentTransform 把 b 移到和 a 对齐（左下原点）。
+        let dx = t.tx / CGFloat(a.width), dy = -t.ty / CGFloat(a.height)
+        return abs(dx) < 0.02 && abs(dy) < 0.02 ? CGVector(dx: dx, dy: dy) : .zero
+    }
+
+    static func intersect(_ a: CGImage?, _ b: CGImage) -> CGImage? {
+        guard let a else { return b }
+        let x = CIImage(cgImage: a, options: [.colorSpace: NSNull()])
+        let y = CIImage(cgImage: b, options: [.colorSpace: NSNull()])
+        let fitted = y.transformed(by: CGAffineTransform(scaleX: x.extent.width / y.extent.width, y: x.extent.height / y.extent.height))
+        let out = x.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: fitted]).cropped(to: x.extent)
+        return Renderer.shared.context.createCGImage(out, from: x.extent, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
+    }
+
+    /// 人和人周围一圈（原图里的人和 AI 图里的人合起来，往外扩一点）。
+    static func personArea(_ a: CGImage?, _ b: CGImage?, size: CGSize) -> CGImage? {
+        let masks = [a, b].compactMap { $0 }
+        guard !masks.isEmpty else { return nil }
+        let k = 640 / max(size.width, size.height)
+        let w = max(1, Int(size.width * k)), h = max(1, Int(size.height * k))
+        let rect = CGRect(x: 0, y: 0, width: w, height: h)
+        var out: CIImage = CIImage(color: .black).cropped(to: rect)
+        for m in masks {
+            let c = CIImage(cgImage: m, options: [.colorSpace: NSNull()])
+            let s = c.transformed(by: CGAffineTransform(scaleX: rect.width / c.extent.width, y: rect.height / c.extent.height))
+            out = s.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: out]).cropped(to: rect)
+        }
+        out = out.clampedToExtent()
+            .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: 22])
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 8])
+            .cropped(to: rect)
+        return Renderer.shared.context.createCGImage(out, from: rect, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
+    }
+}

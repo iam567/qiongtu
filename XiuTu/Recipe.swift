@@ -15,6 +15,12 @@ struct AIRecipe: Codable, Equatable {
     var strength: CGFloat = 1
     var toneOnly = false
     var soften: CGFloat = 0
+    /// 大师构图选的哪一种取景。
+    var masterFrame: String?
+    /// 贴回原图的脸。
+    var keepFace: Bool?
+    /// 只在变了的地方用 AI 的像素。
+    var changedOnly: Bool?
 }
 
 /// 能套到新照片上的一步。
@@ -120,6 +126,8 @@ struct EditRecipe: Codable {
             return RecipeStep(title: "皮肤", detail: "", symbol: "drop", action: nil)
         case .reshape:
             return RecipeStep(title: "面部重塑", detail: "", symbol: "face.dashed", action: nil)
+        case .bodyTone:
+            return RecipeStep(title: "身体提亮", detail: "", symbol: "sun.max", action: nil)
         case .shape:
             return RecipeStep(title: "美体", detail: "", symbol: "figure.stand", action: nil)
         case .layers:

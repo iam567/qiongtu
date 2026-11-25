@@ -6,6 +6,8 @@ struct HistoryView: View {
     var onEdit: (URL) -> Void
     /// 把某张图的处理步骤套到一张新照片上。
     var onApply: (UUID) -> Void
+    /// 存成风格，接着批量处理照片。
+    var onBatch: (UUID) -> Void = { _ in }
     var onClose: () -> Void
 
     private let store = HistoryStore.shared
@@ -155,6 +157,10 @@ struct HistoryView: View {
                                 viewing = item
                             }
                         }
+                        .contextMenu {
+                            Button("保存此风格") { saveStyle(item, batch: false) }
+                            Button("用此风格批量处理…") { saveStyle(item, batch: true) }
+                        }
                 }
             }
             .padding(.bottom, 20)
@@ -183,6 +189,16 @@ struct HistoryView: View {
         .padding(.horizontal, 20)
         .frame(height: 56)
         .background(Theme.panel)
+    }
+
+    private func saveStyle(_ item: HistoryItem, batch: Bool) {
+        Task {
+            guard let style = await StyleStore.shared.add(file: store.fileURL(item)) else {
+                show("保存失败")
+                return
+            }
+            if batch { onBatch(style.id) } else { show("已保存此风格") }
+        }
     }
 
     private func saveSelected() async {

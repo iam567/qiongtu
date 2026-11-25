@@ -159,7 +159,7 @@ struct AIEndpoint {
     let provider: AIProvider
     let key: String
     let model: String
-    let baseURL: String
+    var baseURL: String
     var quality: String
     var hires = true
     /// 要求尽量忠实于输入图（修脸、修跑焦这类必须还是同一个人的任务）。
@@ -352,6 +352,8 @@ final class AISettings {
     func stats(_ provider: AIProvider) -> AIProviderStats { usage[provider] ?? AIProviderStats() }
 
     func addUsage(_ u: AIUsage) {
+        // 接模拟接口的调试运行不记进累计（和正式版共用一份数据）。
+        if testOverride != nil { return }
         var s = stats(u.provider)
         s.requests += 1
         s.inputTokens += u.inputText + u.inputImage

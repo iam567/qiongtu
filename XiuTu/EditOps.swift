@@ -292,6 +292,7 @@ enum EditOp {
     case shape(ShapeParams)
     case instant(InstantParams)
     case effect(EffectParams)
+    case bodyTone(BodyToneParams)
 
     func apply(to image: CIImage) -> CIImage {
         switch self {
@@ -333,6 +334,8 @@ enum EditOp {
             return params.apply(to: image)
         case .effect(let params):
             return params.apply(to: image)
+        case .bodyTone(let params):
+            return params.apply(to: image)
         }
     }
 
@@ -373,6 +376,32 @@ extension EditOp {
             }
         }
         return (photo, floating)
+    }
+
+    /// AI 改内容时，把历史末尾的滤镜和整张调色先拿下来：AI 只看没调色的照片，出来以后再盖回最上面，
+    /// 不然颜色会被 AI 重新算一遍，滤镜就没了。美颜、美妆、美体这些和滤镜换先后差别很小，越过它们继续找。
+    static func splitColor(_ ops: [EditOp]) -> (base: [EditOp], color: [EditOp]) {
+        var base: [EditOp] = []
+        var color: [EditOp] = []
+        var open = true
+        for op in ops.reversed() {
+            guard open else {
+                base.insert(op, at: 0)
+                continue
+            }
+            switch op {
+            case .look:
+                color.insert(op, at: 0)
+            case .adjust(let p) where !p.localChanged:
+                color.insert(op, at: 0)
+            case .beauty, .makeup, .skin, .liquify, .reshape, .shape, .bodyTone:
+                base.insert(op, at: 0)
+            default:
+                open = false
+                base.insert(op, at: 0)
+            }
+        }
+        return (base, color)
     }
 
     /// 会改变画布大小、或者把整个画面挪了位置的步骤。

@@ -23,7 +23,7 @@ struct CropCanvas: View {
     }
 }
 
-private struct CropOverlay: View {
+struct CropOverlay: View {
     @Binding var rect: CGRect
     let size: CGSize
     let lockedAspect: CGFloat?

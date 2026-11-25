@@ -15,6 +15,8 @@ struct AIPreset: Identifiable {
     var toneOnly = false
     /// 美发类：没涂抹时自动把头和头发这一大块发给 AI。
     var hairCrop = false
+    /// 只改身体的这一块：结果只在这一块里采用。
+    var part: BodyPart? = nil
     /// 按钮显示成这个颜色的色块（染发用），0xRRGGBB。
     var tint: UInt32? = nil
     var id: String { title }
@@ -184,30 +186,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
                 AIPreset(title: "虚化背景", symbol: "drop", prompt: "保持人物清晰，把背景虚化成大光圈镜头的效果，过渡自然，发丝边缘不要出错。"),
             ]
         case .master:
-            return [
-                AIPreset(title: "滨田英明", prompt: "给这张照片做专业调色，风格是日系胶片人像的影调：通透柔和的自然光，低反差，略微提亮的空气感，淡淡的青绿色调，自然温暖的肤色。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "日系清新"),
-                AIPreset(title: "川内伦子", prompt: "给这张照片做专业调色，风格是明亮柔和的漫射光，浅淡的粉彩色，安静轻盈的氛围。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "柔光诗意"),
-                AIPreset(title: "蜷川实花", prompt: "给这张照片做专业调色，风格是高饱和的红、粉、蓝撞色，像花卉静物摄影一样鲜明浓郁的色彩。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "浓艳花色"),
-                AIPreset(title: "上田义彦", prompt: "给这张照片做专业调色，风格是安静克制的侧面窗光，柔和的暗部，低饱和，沉静的质感。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "静谧窗光"),
-                AIPreset(title: "森山大道", prompt: "给这张照片做专业调色，风格是高反差黑白，暗部深重，街头快照般的粗粝感，不要加胶片颗粒。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "高反差黑白"),
-                AIPreset(title: "何藩", prompt: "给这张照片做专业调色，风格是强烈的明暗对比，大块的阴影和光束，几何感的构成，黑白，老街头纪实的气质。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "光影几何"),
-                AIPreset(title: "布列松", prompt: "给这张照片做专业调色，风格是经典黑白纪实，丰富的灰阶，自然的反差，干净克制。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "经典纪实"),
-                AIPreset(title: "薇薇安·迈尔", prompt: "给这张照片做专业调色，风格是中画幅黑白街头摄影，细腻的灰阶，平实直接，略带怀旧。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "街头黑白"),
-                AIPreset(title: "萨尔加多", prompt: "给这张照片做专业调色，风格是戏剧性的黑白，厚重的云层和逆光，银盐质感，影调层次极其丰富。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "史诗黑白"),
-                AIPreset(title: "安塞尔·亚当斯", prompt: "给这张照片做专业调色，风格是从纯黑到纯白的完整影调，极高的清晰度，天空和云层层次分明。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "黑白风光"),
-                AIPreset(title: "莱博维茨", prompt: "给这张照片做专业调色，风格是有方向感的布光，立体的明暗，浓郁沉稳的色彩，油画般的质感。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "杂志大片"),
-                AIPreset(title: "林德伯格", prompt: "给这张照片做专业调色，风格是自然朴素的黑白人像，柔和的自然光，电影剧照般的情绪，不要加胶片颗粒。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "电影感黑白"),
-                AIPreset(title: "阿维顿", prompt: "给这张照片做专业调色，风格是直接清晰的黑白肖像，人物神态突出，背景处理成干净的浅色。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "极简肖像"),
-                AIPreset(title: "欧文·佩恩", prompt: "给这张照片做专业调色，风格是柔和而有雕塑感的光线，优雅克制的影棚肖像影调，背景处理成干净的灰色。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "优雅影棚"),
-                AIPreset(title: "牛顿", prompt: "给这张照片做专业调色，风格是高反差黑白，硬光，利落有力的影调。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "硬光黑白"),
-                AIPreset(title: "麦柯里", prompt: "给这张照片做专业调色，风格是饱满而有层次的色彩，眼神光清晰，主体从背景中分离出来。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "浓郁纪实"),
-                AIPreset(title: "索尔·雷特", prompt: "给这张照片做专业调色，风格是绘画感的色块，柔和的褪色调子，暖色点缀，带一点朦胧。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "街头彩色"),
-                AIPreset(title: "埃格尔斯顿", prompt: "给这张照片做专业调色，风格是染料转印般浓郁的颜色，尤其是红色，日常场景里的鲜明色彩。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "日常浓彩"),
-                AIPreset(title: "蒂姆·沃克", prompt: "给这张照片做专业调色，风格是童话绘本般的色调，柔和的粉彩和暖光，但不要改变场景里有什么。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "童话奇想"),
-                AIPreset(title: "王家卫", prompt: "给这张照片做专业调色，风格是港产老电影的色调：浓重的霓虹色，青绿和橙红对撞，暗部偏青，不要加胶片颗粒。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "港风电影"),
-                AIPreset(title: "岩井俊二", prompt: "给这张照片做专业调色，风格是日本老电影的影调：逆光，柔焦，泛白的高光，淡淡的青色和暖色，怀旧的空气感。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "逆光青春"),
-                AIPreset(title: "韦斯·安德森", prompt: "给这张照片做专业调色，风格是糖果般的粉彩配色，平整明亮的光线，复古而精致。只调整光线、色彩、反差和影调；画面内容、人物长相、姿势、服装和构图都保持原样，结果仍是一张真实的照片。", note: "对称粉彩"),
-            ]
+            return MasterCatalog.presets
         case .camera:
             return [
                 AIPreset(title: "徕卡 M", symbol: "camera", prompt: "这是一张手机拍的照片。把它处理成用徕卡 M 旁轴相机配 35mm f/1.4 镜头拍出来的样子：反差扎实、暗部深而有层次，颜色克制略偏暖，微反差高、主体立体，焦外柔和，四角有一点自然的暗角。去掉手机照片那种过度锐化、HDR 和涂抹感，景深、焦外和镜头的成像质感要像真的大底相机；不要加胶片颗粒。人物长相、姿势、服装和构图不变，结果仍然是一张真实的照片。"),
@@ -238,7 +217,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
                 AIPreset(title: "长腿", symbol: "figure.walk", prompt: "把腿稍微拉长一些，让身材比例更修长，保持自然，背景不要变形。"),
                 AIPreset(title: "瘦腰", symbol: "arrow.right.and.line.vertical.and.arrow.left", prompt: "让腰稍微细一点，线条自然，衣服的褶皱和背景保持合理。"),
                 AIPreset(title: "瘦手臂", symbol: "figure.arms.open", prompt: "让手臂稍微纤细一些，保持自然，不要改变姿势。"),
-                AIPreset(title: "肤色提亮", symbol: "sun.max", prompt: "全身肤色提亮、更均匀通透，保持自然，不要过曝。"),
+                AIPreset(title: "肤色提亮", symbol: "sun.max", prompt: "全身肤色提亮、更均匀通透，保持自然，不要过曝。", toneOnly: true),
             ]
         case .hairStyle:
             if GenderSetting.shared.isMale { return MalePresets.hairStyles }
@@ -364,6 +343,16 @@ struct AIEdit {
     var reframed = false
     /// 0...1，把 AI 结果过头的锐化压下去，在本机调。
     var soften: CGFloat = 0
+    /// 贴回原图的脸（整张重画的结果用）。
+    var faces: [FaceKeep] = []
+    /// 只在真正变了的地方用 AI 的像素（美体、去路人这类只动一部分的）。
+    var changedOnly = false
+    /// changedOnly 允许换的范围（人和周围一圈）；nil = 整张。
+    var area: CGImage? = nil
+    /// AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。
+    var shift: CGVector = .zero
+    /// AI 的结果是黑白的：只取光影时把颜色也去掉。
+    var mono = false
     /// 这一步是怎么发起的（套用到新照片时再跑一遍）；涂抹、融合出来的没有。
     var recipe: AIRecipe? = nil
 
@@ -380,6 +369,15 @@ struct AIEdit {
 
     var hasRegion: Bool { strokes.contains { !$0.erase } }
 
+    private func keepFaces(_ out: CIImage, original: CIImage) -> CIImage {
+        var out = out
+        for face in faces {
+            out = face.apply(to: out, original: original)
+        }
+        if mono, !faces.isEmpty { out = out.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0]) }
+        return out
+    }
+
     func apply(to image: CIImage) -> CIImage {
         let extent = image.extent
         if reframed {
@@ -389,7 +387,7 @@ struct AIEdit {
             let w = (r.extent.width * k).rounded(), h = (r.extent.height * k).rounded()
             let out = r.transformed(by: CGAffineTransform(scaleX: w / r.extent.width, y: h / r.extent.height))
                 .cropped(to: CGRect(x: 0, y: 0, width: w, height: h))
-            return Self.softened(out, amount: soften)
+            return keepFaces(Self.softened(out, amount: soften), original: image)
         }
         var target = extent
         if let f = frame {
@@ -400,10 +398,23 @@ struct AIEdit {
         r = r.transformed(by: CGAffineTransform(scaleX: target.width / r.extent.width,
                                                 y: target.height / r.extent.height))
             .transformed(by: CGAffineTransform(translationX: target.minX, y: target.minY))
+            .transformed(by: CGAffineTransform(translationX: shift.dx * extent.width, y: -shift.dy * extent.height))
             .clampedToExtent()
             .cropped(to: extent)
-        if toneOnly { r = ToneTransfer.apply(original: image, graded: r) }
+        if changedOnly, !toneOnly {
+            r = ChangeKeep.apply(original: image, ai: r, area: area.map { AIRegion.scaled(mask: $0, to: extent, feather: false) })
+        }
+        if toneOnly {
+            r = ToneTransfer.apply(original: image, graded: r)
+            if mono { r = r.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0]) }
+            if let area {
+                r = r.applyingFilter("CIBlendWithMask", parameters: [
+                    kCIInputBackgroundImageKey: image, kCIInputMaskImageKey: AIRegion.scaled(mask: area, to: extent, feather: false),
+                ]).cropped(to: extent)
+            }
+        }
         r = Self.softened(r, amount: soften)
+        if !toneOnly { r = keepFaces(r, original: image) }
 
         var mask: CIImage?
         if let ellipse {

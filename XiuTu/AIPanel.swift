@@ -57,6 +57,7 @@ struct AIPanel: View {
 
     private let settings = AISettings.shared
     @State private var creativeKind: CreativeKind = .comic
+    @State private var masterGroup = MasterCatalog.groups.first ?? ""
 
     var body: some View {
         VStack(spacing: 10) {
@@ -118,7 +119,16 @@ struct AIPanel: View {
     }
 
     /// 点一个功能就直接开始。需要补充内容的（比如"换背景"）先弹出输入框，写完自动开始。
+    @ViewBuilder
     private var compose: some View {
+        if model.aiGroup == .master, let title = model.aiMasterPick, let master = MasterCatalog.byTitle[title] {
+            MasterCard(model: model, master: master) { start(AIPreset(title: master.title, prompt: master.prompt)) }
+        } else {
+            tiles
+        }
+    }
+
+    private var tiles: some View {
         let master = model.aiGroup.usesTonePreview
         let pictures = master || model.aiGroup == .hairStyle
         return VStack(spacing: 10) {
@@ -138,10 +148,12 @@ struct AIPanel: View {
                 }
             }
             if model.aiGroup == .master {
-                HStack(spacing: 8) {
-                    Chip(title: "大师构图", symbol: "viewfinder", selected: model.aiMasterCompose) { model.aiMasterCompose = true }
-                    Chip(title: "原构图", symbol: "rectangle", selected: !model.aiMasterCompose) { model.aiMasterCompose = false }
-                    Spacer(minLength: 0)
+                HScroll {
+                    HRow(spacing: 8) {
+                        ForEach(MasterCatalog.groups, id: \.self) { name in
+                            Chip(title: name, selected: masterGroup == name) { masterGroup = name }
+                        }
+                    }
                 }
             }
             if model.aiGroup == .compose {
@@ -155,12 +167,19 @@ struct AIPanel: View {
             }
             HScroll {
                 HRow(alignment: .top, spacing: pictures ? 10 : 4) {
-                    ForEach(model.aiGroup == .creative ? creativeKind.presets : model.aiGroup.presets) { preset in
+                    if model.aiGroup == .compose {
+                        FeatureTile(symbol: Tool.smartCrop.symbol, title: Tool.smartCrop.title, badge: "AI") {
+                            model.commitTool { model.begin(.smartCrop) }
+                        }
+                    }
+                    ForEach(presets) { preset in
                         if model.aiGroup == .creative, model.masterThumbs[preset.title] == nil {
                             CreativeArtTile(title: preset.title, symbol: preset.symbol, kind: creativeKind) { start(preset) }
                         } else if master {
                             ImageTile(title: preset.title, image: model.masterThumbs[preset.title],
-                                      symbol: model.aiGroup.symbol, badge: "AI") { start(preset) }
+                                      symbol: model.aiGroup.symbol, badge: "AI") {
+                                if model.aiGroup == .master { model.pickMaster(preset.title) } else { start(preset) }
+                            }
                         } else if let tint = preset.tint {
                             ColorTile(hex: tint, title: preset.title) { start(preset) }
                         } else if model.aiGroup == .hairStyle {
@@ -181,7 +200,7 @@ struct AIPanel: View {
                 .padding(.bottom, 2)
             }
             .padding(.horizontal, -16)
-            .id(model.aiGroup == .creative ? "creative-" + creativeKind.rawValue : model.aiGroup.rawValue)
+            .id(model.aiGroup == .creative ? "creative-" + creativeKind.rawValue : model.aiGroup.rawValue + (master ? masterGroup : ""))
             HStack(spacing: 10) {
                 Text("涂抹")
                     .font(.system(size: 13))
@@ -196,6 +215,14 @@ struct AIPanel: View {
         }
         .task(id: model.aiGroup) {
             if model.aiGroup.usesTonePreview { model.prepareMasterThumbs() }
+        }
+    }
+
+    private var presets: [AIPreset] {
+        switch model.aiGroup {
+        case .creative: return creativeKind.presets
+        case .master: return MasterCatalog.presets.filter { MasterCatalog.byTitle[$0.title]?.group == masterGroup }
+        default: return model.aiGroup.presets
         }
     }
 
@@ -216,7 +243,9 @@ struct AIPanel: View {
         model.aiPresetTitle = preset.title
         model.aiFaceCrop = preset.faceCrop
         model.aiHairCrop = preset.hairCrop
-        model.aiToneOnly = preset.toneOnly
+        // 大师"原构图"：只取 AI 的光影和颜色，细节全用原图，脸上不会有涂抹感。
+        model.aiToneOnly = preset.toneOnly || (model.aiGroup == .master && !model.aiMasterCompose)
+        model.aiPart = preset.part
         if preset.prompt.hasSuffix("：") { editPrompt() } else { model.runAI() }
     }
 
@@ -227,6 +256,7 @@ struct AIPanel: View {
         model.aiFaceCrop = false
         model.aiHairCrop = model.aiGroup.isHair
         model.aiToneOnly = false
+        model.aiPart = nil
         editPrompt()
     }
 
@@ -257,10 +287,24 @@ struct AIPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             // 改形状的（美体、美发）没有"只取光影"这回事。
-            if !model.aiGroup.isHair, model.aiGroup != .body, model.aiGroup != .creative, !model.aiResultReframed, !model.aiResultFused {
+            if !model.aiGroup.isHair, model.aiGroup != .body, model.aiGroup != .creative, !model.aiCanKeepRest, !model.aiResultReframed, !model.aiResultFused {
                 HStack(spacing: 8) {
                     Chip(title: "只取光影色彩", selected: model.aiToneOnly) { model.setAIToneOnly(true) }
                     Chip(title: "完整采用 AI 图", selected: !model.aiToneOnly) { model.setAIToneOnly(false) }
+                    Spacer()
+                }
+            }
+            if model.aiCanKeepRest, !model.aiToneOnly {
+                HStack(spacing: 8) {
+                    Chip(title: "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
+                    Chip(title: "完整采用 AI 图", selected: !model.aiChangedOnly) { model.setAIChangedOnly(false) }
+                    Spacer()
+                }
+            }
+            if !model.aiFaces.isEmpty, model.aiResultReframed || !model.aiToneOnly {
+                HStack(spacing: 8) {
+                    Chip(title: "用原图的脸", selected: model.aiKeepFace) { model.setAIKeepFace(true) }
+                    Chip(title: "用 AI 的脸", selected: !model.aiKeepFace) { model.setAIKeepFace(false) }
                     Spacer()
                 }
             }

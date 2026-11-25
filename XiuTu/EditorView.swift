@@ -54,6 +54,7 @@ enum MainTab: String, CaseIterable, Identifiable {
                 MenuEntry(title: "增高", symbol: "arrow.up.and.down", action: .shape(.tall)),
                 MenuEntry(title: "瘦身", symbol: "arrow.right.and.line.vertical.and.arrow.left", action: .shape(.slim)),
                 MenuEntry(title: "缩放", symbol: "circle.dashed", action: .shape(.zoom)),
+                MenuEntry(tool: .bodyTone),
                 MenuEntry(title: "推拉", symbol: "hand.draw", action: .tool(.liquify)),
                 MenuEntry(title: "AI 美体", symbol: "sparkles", badge: "AI", action: .ai(.body)),
             ]
@@ -69,7 +70,7 @@ enum MainTab: String, CaseIterable, Identifiable {
         case .ai:
             return AIPresetGroup.editGroups.map {
                 MenuEntry(title: $0.menuTitle, symbol: $0.symbol, badge: "AI", action: .ai($0))
-            }
+            } + [MenuEntry(title: Tool.smartCrop.title, symbol: Tool.smartCrop.symbol, badge: "AI", action: .tool(.smartCrop))]
         case .filter, .effect, .adjust:
             return []
         }
@@ -217,9 +218,21 @@ struct EditorView: View {
                 }
             }
             // 调试用：XIUTU_TOOL=adjust / ai:remove 打开后直接进某个工具，方便截图检查面板。
+            if let look = ProcessInfo.processInfo.environment["XIUTU_LOOK"] { await model.appendOp(.look(id: look, intensity: 1)) }
             if let name = ProcessInfo.processInfo.environment["XIUTU_TOOL"] {
                 if name.hasPrefix("ai:"), let group = AIPresetGroup(rawValue: String(name.dropFirst(3))) {
                     handle(.ai(group))
+                    if let m = ProcessInfo.processInfo.environment["XIUTU_MASTER"] {
+                        model.pickMaster(m)
+                        // 接了模拟接口时自动点"开始生成"，测整条流程。
+                        if ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil, let preset = MasterCatalog.presets.first(where: { $0.title == m }) {
+                            model.aiMasterCompose = ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] == "compose"
+                            model.aiPrompt = preset.prompt
+                            model.aiPresetTitle = m
+                            model.aiToneOnly = !model.aiMasterCompose
+                            model.runAI()
+                        }
+                    }
                 } else if name == "text+vertical" {
                     model.open(.text) {
                         let id = model.addOverlay(text: "积极佳佳佳佳佳佳佳佳佳佳佳家\n第二段", sticker: false)
@@ -230,10 +243,16 @@ struct EditorView: View {
                 } else if name.hasPrefix("shape:"), let group = ShapeGroup(rawValue: String(name.dropFirst(6))) {
                     handle(.shape(.shape))
                     model.shapeState.group = group
+                    if ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            if let item = group.items.first(where: \.isAI) { model.selectShapeItem(item) }
+                        }
+                    }
                 } else if name == "layers+blank" {
                     model.open(.layers) { model.addBlankLayer() }
                 } else if let tool = Tool(rawValue: name) {
                     start(tool)
+                    if tool == .smartCrop, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil { model.runSmartCrop() }
                 }
             }
             #endif
@@ -421,6 +440,18 @@ struct EditorView: View {
             .overlay(alignment: .bottomTrailing) { compareButton }
         case .some(.shape):
             ShapeCanvas(model: model)
+        case .some(.smartCrop):
+            SmartCropCanvas(model: model)
+        case .some(.bodyTone):
+            ZoomableCanvas(image: model.shownImage, handlers: model.bodyToneWantsStrokes ? DrawHandlers(
+                began: { point, scale in model.bodyToneStrokeBegan(at: point, displayScale: scale) },
+                moved: { point in model.bodyToneStrokeMoved(to: point) },
+                ended: { model.bodyToneStrokeEnded() },
+                cancelled: { model.bodyToneStrokeCancelled() }
+            ) : nil, detail: model.comparing ? nil : model.detailImage, detailRect: model.detailRect,
+               onViewport: { rect, pixels in model.setViewport(rect, pixels: pixels) },
+               onTap: { point in model.bodyToneTapped(at: point) })
+            .overlay(alignment: .bottomTrailing) { compareButton }
         case .some(.collage):
             CollageCanvas(model: model)
         case .some(.layers):
@@ -554,6 +585,8 @@ struct EditorView: View {
         case .makeup: MakeupPanel(model: model)
         case .skin: SkinPanel(model: model)
         case .shape: ShapePanel(model: model)
+        case .bodyTone: BodyTonePanel(model: model)
+        case .smartCrop: SmartCropPanel(model: model, openSettings: { showSettings = true })
         case .effect: EffectPanel(model: model)
         }
     }

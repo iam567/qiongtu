@@ -28,6 +28,7 @@ enum Route: Hashable {
     case studioPicker
     case studio(assetID: String)
     case manga
+    case batch(UUID?)
     case rawPicker
     case editorFile(URL)
     case history
@@ -49,6 +50,7 @@ struct RootView: View {
                      startCover: { path.append(.coverPicker) },
                      startStudio: { path.append(.studioPicker) },
                      startManga: { path.append(.manga) },
+                     startBatch: { path.append(.batch(nil)) },
                      startRaw: { path.append(.rawPicker) },
                      startHistory: { path.append(.history) },
                      startFavorite: { path.append(.favoriteFace) },
@@ -84,6 +86,8 @@ struct RootView: View {
                         }
                     case .manga:
                         MangaView { path.removeAll() }
+                    case .batch(let style):
+                        BatchStyleView(styleID: style) { if !path.isEmpty { path.removeLast() } }
                     case .rawPicker:
                         RawPickerView(onEdit: { url in path.append(.editorFile(url)) }, onClose: { path.removeAll() })
                     case .editorFile(let url):
@@ -99,6 +103,7 @@ struct RootView: View {
                     case .history:
                         HistoryView(onEdit: { url in path.append(.editorFile(url)) },
                                     onApply: { id in path.append(.recipePicker(id)) },
+                                    onBatch: { id in path.append(.batch(id)) },
                                     onClose: { path.removeAll() })
                     case .recipePicker(let id):
                         PhotoPickerView(
@@ -152,6 +157,7 @@ struct HomeView: View {
     var startCover: () -> Void = {}
     var startStudio: () -> Void = {}
     var startManga: () -> Void = {}
+    var startBatch: () -> Void = {}
     var startRaw: () -> Void = {}
     var startHistory: () -> Void = {}
     var startFavorite: () -> Void = {}
@@ -225,18 +231,20 @@ struct HomeView: View {
                 .buttonStyle(.plain)
 
                 // 其他功能入口都排在"开始编辑"下面。
+                ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 10) {
                     featureButton(symbol: "camera.filters", title: "RAW 冲洗", subtitle: "相机 RAW / DNG · 曝光、色阶、白平衡 · 调好再进编辑", action: startRaw)
                     featureButton(symbol: "crown.fill", title: "封神", subtitle: "AI 杂志封面 · 电影海报 · 85 种风格", action: startCover)
                     featureButton(symbol: "camera.aperture", title: "摄影棚", subtitle: "一张照片拍一组套图 · 166 个场景 · 29 位摄影师", action: startStudio)
                     featureButton(symbol: "book.pages.fill", title: "漫画人生", subtitle: "把生活照片画成漫画 · 15 种画风", action: startManga)
+                    featureButton(symbol: "square.stack.3d.down.right.fill", title: "统一风格", subtitle: "一批照片调成同一种色彩", action: startBatch)
                     featureButton(symbol: history.hasPassword ? "lock.fill" : "photo.stack", title: "历史图库",
                                   subtitle: "\(history.items.count) 张", action: startHistory)
                     featureButton(symbol: "star.fill", title: "满意脸型",
                                   subtitle: "\(FavoriteFaceStore.shared.faces.count) 个", action: startFavorite)
                 }
-
-                Spacer()
+                }
+                .scrollBounceBehavior(.basedOnSize)
 
                 Button { showSettings = true } label: {
                     HStack(spacing: 10) {
