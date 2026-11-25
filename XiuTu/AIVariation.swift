@@ -56,7 +56,7 @@ enum AIVariation {
             keep = "还是同一个地方，画面里不要出现任何人。"
         case .master where recompose:
             keep = "人物长相不变，还是同一个地方。"
-        case .fix, .remove, .compose, .body, .hairStyle, .hairColor, .hairCare:
+        case .fix, .remove, .outfit, .compose, .body, .hairStyle, .hairColor, .hairCare:
             keep = "原来的要求全部照旧，人物长相不变。"
         default:
             keep = "人物长相和构图不变。"

@@ -52,7 +52,7 @@ enum AIIntent {
 }
 
 enum AIPresetGroup: String, CaseIterable, Identifiable {
-    case fix, light, remove, compose, master, camera, creative, body
+    case fix, light, remove, outfit, compose, master, camera, creative, body
     case hairStyle, hairColor, hairCare
 
     var id: String { rawValue }
@@ -62,6 +62,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
         case .fix: return "修复"
         case .light: return "光线"
         case .remove: return "消除"
+        case .outfit: return "换衣服"
         case .compose: return "构图"
         case .master: return "大师"
         case .camera: return "相机"
@@ -79,7 +80,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
     var isHair: Bool { Self.hairGroups.contains(self) }
 
     /// AI 修图面板里的四组；AI 美体单独放在"美体"里。
-    static let editGroups: [AIPresetGroup] = [.fix, .light, .remove, .compose, .master, .camera, .creative]
+    static let editGroups: [AIPresetGroup] = [.fix, .light, .remove, .outfit, .compose, .master, .camera, .creative]
 
     /// 主菜单里的名字（面板里的分段标签用更短的 title）。
     var menuTitle: String {
@@ -98,6 +99,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
         case .fix: return "wand.and.stars"
         case .light: return "lightbulb"
         case .remove: return "eraser"
+        case .outfit: return "tshirt"
         case .compose: return "crop"
         case .master: return "camera.aperture"
         case .camera: return "camera"
@@ -115,6 +117,7 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
         case .fix: return "让 AI 找出并修掉拍摄上的毛病，内容和构图不变。"
         case .light: return "让 AI 给画面重新打光；内容和构图不变。"
         case .remove: return "去掉或换掉画面里的东西。"
+        case .outfit: return "只换衣服。"
         case .compose: return "会重新安排画面，整张图由 AI 重画，分辨率以 AI 输出为准。"
         case .master: return "按这位摄影师的典型风格重新处理光线、色彩和影调；整张图交给 AI 重画。"
         case .camera: return "把手机拍的照片处理成这台相机拍出来的质感；整张图交给 AI 重画。"
@@ -177,6 +180,8 @@ enum AIPresetGroup: String, CaseIterable, Identifiable {
                 AIPreset(title: "换背景", symbol: "person.and.background.dotted", prompt: "保持人物不变，把背景换成："),
                 AIPreset(title: "换天空", symbol: "cloud.sun", prompt: "保持地面和人物不变，把天空换成："),
             ]
+        case .outfit:
+            return []
         case .compose:
             return [
                 AIPreset(title: "重新构图", symbol: "viewfinder", prompt: "你是一位摄影大师。判断这张照片的构图问题（主体位置、留白、头顶和脚下的空间、画面是否歪斜、边缘是否有干扰），然后重新构图，让主体更突出、画面更平衡。构图只是取景的要求，画面里不要画出任何网格、辅助线、取景框、文字或标记。人物长相、姿势和服装不变，画面比例不变。"),
@@ -349,6 +354,8 @@ struct AIEdit {
     var changedOnly = false
     /// changedOnly 允许换的范围（人和周围一圈）；nil = 整张。
     var area: CGImage? = nil
+    /// 换衣服：这一块一定用 AI 的（人身上、下巴以下）。
+    var core: CGImage? = nil
     /// AI 图整体偏了多少（占宽高的比例，左上原点），对齐后再比较。
     var shift: CGVector = .zero
     /// AI 的结果是黑白的：只取光影时把颜色也去掉。
@@ -402,7 +409,8 @@ struct AIEdit {
             .clampedToExtent()
             .cropped(to: extent)
         if changedOnly, !toneOnly {
-            r = ChangeKeep.apply(original: image, ai: r, area: area.map { AIRegion.scaled(mask: $0, to: extent, feather: false) })
+            r = ChangeKeep.apply(original: image, ai: r, area: area.map { AIRegion.scaled(mask: $0, to: extent, feather: false) },
+                                 core: core.map { AIRegion.scaled(mask: $0, to: extent, feather: false) })
         }
         if toneOnly {
             r = ToneTransfer.apply(original: image, graded: r)

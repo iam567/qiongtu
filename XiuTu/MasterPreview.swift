@@ -13,7 +13,7 @@ enum MasterPreview {
     }
 
     /// 按 AIPresetGroup.master 里的名字对应。
-    static let looks: [String: FilmLook] = Dictionary(uniqueKeysWithValues: [
+    static let looks: [String: FilmLook] = Dictionary([
         make("滨田英明", bloom: 0.15) { c in
             c.exposure = 0.22; c.contrast = -0.25; c.shadows = 0.35; c.highlights = -0.1; c.saturation = -0.12
             c.temperature = -0.03; c.fade = 0.25
@@ -94,7 +94,7 @@ enum MasterPreview {
             c.exposure = 0.1; c.contrast = -0.05; c.saturation = 0.15; c.temperature = 0.1; c.tint = 0.06; c.fade = 0.18
             c.shadowTint = SIMD3(0.02, 0.0, 0.01); c.highlightTint = SIMD3(0.03, 0.015, 0.0)
         },
-    ] + MasterCatalog.looks + cameraLooks + lightLooks)
+    ] + MasterCatalog.looks + cameraLooks + lightLooks, uniquingKeysWith: { _, new in new })
 
     /// 相机质感按钮上的小图：沿用本机"相机"滤镜里对应的色调（没有对应的就单独配一组）。
     private static let cameraLooks: [(String, FilmLook)] = {

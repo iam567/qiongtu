@@ -62,8 +62,9 @@ extension EditorModel {
         let session = reshapeState.session
         reshapeState.detecting = true
         Task { [weak self] in
-            let found = await Task.detached(priority: .userInitiated) { FaceDetector.detect(in: cg) }.value
-            guard let self, self.tool == .reshape, self.reshapeState.session == session else { return }
+            guard let self else { return }
+            let found = await self.findFaces()
+            guard self.tool == .reshape, self.reshapeState.session == session else { return }
             self.reshapeState.detecting = false
             self.reshapeState.params.faces = found.map { ReshapeFace(info: $0) }
             let size = CGSize(width: cg.width, height: cg.height)
@@ -90,6 +91,7 @@ extension EditorModel {
 
     /// 单击了画面：还原模式下在这里点一下还原一小片；否则点哪张脸就选哪张脸。
     func reshapeTapped(at point: CGPoint) {
+        if rescueFace(at: point) { return }
         guard !reshapeState.detecting else { return }
         if reshapeState.restoring {
             guard reshapeState.hasChanges, let face = reshapeState.face else { return }

@@ -90,12 +90,7 @@ struct ReshapePanel: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 26)
             } else if let error = state.error, !state.usable.contains(true) {
-                Text(error)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                FaceRescue(model: model, message: error.trimmingCharacters(in: CharacterSet(charactersIn: "。")))
             } else {
                 if let error = state.error {
                     Text(error)

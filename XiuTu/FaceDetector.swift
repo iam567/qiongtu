@@ -39,7 +39,14 @@ struct FaceInfo: Equatable, Codable {
 
 /// 用系统自带的 Vision 找人脸，全部在本机完成。
 enum FaceDetector {
+    /// 整张找一遍，找不到再分块放大找小脸。
     static func detect(in image: CGImage) -> [FaceInfo] {
+        let found = direct(in: image)
+        return found.isEmpty ? FaceFinder.deep(image) : found
+    }
+
+    /// 只整张找一遍。
+    static func direct(in image: CGImage) -> [FaceInfo] {
         #if DEBUG
         // 模拟器里 Vision 的五官关键点是坏的，测试时可以放一份在 Mac 上算好的结果进来。
         if ProcessInfo.processInfo.environment["XIUTU_TEST_BASE"] != nil,

@@ -17,7 +17,9 @@ struct SkinPanel: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 26)
             } else {
-                if let message = errorText(state) {
+                if state.params.faces.isEmpty, errorText(state) != nil {
+                    FaceRescue(model: model, message: "这张图里没有找到人脸")
+                } else if let message = errorText(state) {
                     Text(message)
                         .font(.system(size: 12))
                         .foregroundStyle(Self.warning)

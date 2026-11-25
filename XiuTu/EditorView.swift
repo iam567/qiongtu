@@ -222,6 +222,12 @@ struct EditorView: View {
             if let name = ProcessInfo.processInfo.environment["XIUTU_TOOL"] {
                 if name.hasPrefix("ai:"), let group = AIPresetGroup(rawValue: String(name.dropFirst(3))) {
                     handle(.ai(group))
+                    if let t = ProcessInfo.processInfo.environment["XIUTU_OUTFIT"], let o = OutfitCatalog.all.first(where: { $0.title == t }) {
+                        model.pickOutfit(o)
+                        if ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil {
+                            model.runOutfit(prompt: OutfitCatalog.prompt(o, color: model.outfitColor, skirt: model.outfitSkirt), title: o.title)
+                        }
+                    }
                     if let m = ProcessInfo.processInfo.environment["XIUTU_MASTER"] {
                         model.pickMaster(m)
                         // 接了模拟接口时自动点"开始生成"，测整条流程。

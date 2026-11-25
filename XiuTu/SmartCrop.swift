@@ -88,6 +88,23 @@ enum SmartCrop {
         return out
     }
 
+    /// 读一组框（找脸用）。
+    static func boxes(_ text: String, key: String) -> [CGRect] {
+        guard let dict = jsonObject(in: text, start: "{\"\(key)\"") as? [String: Any], let list = dict[key] as? [[String: Any]] else { return [] }
+        return list.compactMap { item in
+            var b = numbers(item["box"])
+            if b.count != 4 {
+                let yx = numbers(item["box_2d"])
+                guard yx.count == 4 else { return nil }
+                b = [yx[1], yx[0], yx[3], yx[2]]
+            }
+            let k: CGFloat = (b.max() ?? 0) <= 1.001 ? 1 : 1000
+            let r = CGRect(x: min(b[0], b[2]) / k, y: min(b[1], b[3]) / k, width: abs(b[2] - b[0]) / k, height: abs(b[3] - b[1]) / k)
+                .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+            return r.isNull || r.width < 0.004 || r.height < 0.004 ? nil : r
+        }
+    }
+
     private static func short(_ value: Any?, _ limit: Int, _ fallback: String) -> String {
         let text = (value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? fallback : String(text.prefix(limit))
@@ -98,11 +115,11 @@ enum SmartCrop {
     }
 
     /// 回复里可能夹着思考过程或 ``` 代码块：从后往前找能解析的那一段。
-    private static func jsonObject(in text: String) -> Any? {
+    private static func jsonObject(in text: String, start key: String = "{\"crops\"") -> Any? {
         func parse(_ s: Substring) -> Any? { try? JSONSerialization.jsonObject(with: Data(s.utf8)) }
         if let whole = parse(text[...]) { return whole }
         guard let end = text.lastIndex(of: "}") else { return nil }
-        var start = text.range(of: "{\"crops\"")?.lowerBound ?? text.firstIndex(of: "{")
+        var start = text.range(of: key)?.lowerBound ?? text.firstIndex(of: "{")
         while let s = start, s < end {
             if let found = parse(text[s...end]) { return found }
             start = text[text.index(after: s)...].firstIndex(of: "{")

@@ -126,6 +126,17 @@ struct FaceKeep: Equatable {
         outline = outline.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
     }
 
+    /// 这张脸在 AI 图里基本没动。
+    var isStill: Bool {
+        guard let first = outline.first else { return false }
+        // 反推这一点在原图的位置，看差多少。
+        let n = a * a + b * b
+        let dx = Double(first.x) - tx, dy = Double(first.y) - ty
+        let x = (a * dx + b * dy) / n, y = (a * dy - b * dx) / n
+        let moved = hypot(x - Double(first.x), y - Double(first.y))
+        return moved < Double(width) * 0.12 && abs(n.squareRoot() - 1) < 0.04 && abs(atan2(b, a)) < 0.04
+    }
+
     // MARK: 贴回
 
     /// out：AI 的结果（已经放大到成品大小）；original：这一步之前的画面。

@@ -111,10 +111,12 @@ extension EditorModel {
         guard let cg = baseUIImage?.cgImage else { return }
         makeupState.detecting = true
         Task { [weak self] in
+            guard let self else { return }
+            let list = await self.findFaces()
             let found = await Task.detached(priority: .userInitiated) { () -> [(FaceInfo, MKTone)] in
-                FaceDetector.detect(in: cg).map { ($0, MKTone.measure(face: $0, in: cg)) }
+                list.map { ($0, MKTone.measure(face: $0, in: cg)) }
             }.value
-            guard let self, self.tool == .makeup, self.makeupState.session == session else { return }
+            guard self.tool == .makeup, self.makeupState.session == session else { return }
             let usable = found.filter { $0.0.hasReliableLandmarks && $0.0.outerLips.count >= 6 }
             self.makeupState.detecting = false
             self.makeupState.unreliable = usable.isEmpty && !found.isEmpty
@@ -137,6 +139,7 @@ extension EditorModel {
 
     /// 单击了画面：正在点痣就落一颗痣，否则点到哪张脸就切到哪张。
     func makeupTapped(at point: CGPoint) {
+        if rescueFace(at: point) { return }
         let state = makeupState
         if state.placingMole, let face = state.current {
             let area = face.face.box.insetBy(dx: -face.face.box.width * 0.25, dy: -face.face.box.height * 0.3)

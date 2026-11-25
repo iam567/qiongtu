@@ -106,12 +106,7 @@ struct BeautyPanel: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 26)
             } else if model.faces.isEmpty {
-                Text("这张图里没有找到人脸")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.dim)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                FaceRescue(model: model, message: "这张图里没有找到人脸")
             } else {
                 if model.faces.count > 1 { facePicker }
                 if model.beautyMode == .ai { aiSection } else { manualSection }

@@ -102,6 +102,17 @@ final class EditorModel {
     var aiSoften: CGFloat = 0
     /// 同一条指令点了几次"再生成一次"；每次在指令后面加不同的变化要求，避免出来的图都一样。
     /// 大师：点了哪一位（先看风格，确定了再生成）、选的哪一种取景。
+    /// 换衣服：点了哪一款、颜色、裙摆、照着换的图；patch = 涂抹补换没换干净的地方。
+    /// 用户点的、AI 指出来的脸（画布大小没变就一直用）。
+    @ObservationIgnored var forcedFaces: [FaceInfo] = []
+    @ObservationIgnored var forcedFacesSize: CGSize?
+    var faceRescuing = false
+    var faceRescueError: String?
+    var outfitPick: Outfit?
+    var outfitColor = ""
+    var outfitSkirt: OutfitSkirt = .normal
+    var outfitReference: UIImage?
+    var outfitPatch = false
     var bodyToneState = BodyToneState()
     var smartCropState = SmartCropState()
     @ObservationIgnored var smartCropTask: Task<Void, Never>?
@@ -114,6 +125,9 @@ final class EditorModel {
     var aiChangedOnly = true
     var aiCanKeepRest = false
     @ObservationIgnored private var aiArea: CGImage?
+    @ObservationIgnored private var aiCore: CGImage?
+    /// 这次结果是换衣服（结果面板上的说法不一样）。
+    var aiResultOutfit = false
     @ObservationIgnored private var aiShift: CGVector = .zero
     /// 这条指令只该动身体的哪一块。
     var aiPart: BodyPart?
@@ -541,6 +555,11 @@ final class EditorModel {
         aiMono = false
         aiCanKeepRest = false
         aiArea = nil
+        aiCore = nil
+        aiResultOutfit = false
+        outfitPick = nil
+        outfitReference = nil
+        outfitPatch = false
         aiShift = .zero
         aiLift = []
         aiBase = nil
@@ -587,6 +606,42 @@ final class EditorModel {
             aiToneOnly = preset.toneOnly
             aiPart = preset.part
             runAI()
+        }
+    }
+
+    func pickOutfit(_ outfit: Outfit?) {
+        aiError = nil
+        outfitPick = outfit
+        if let outfit, !outfit.colors.contains(outfitColor) { outfitColor = outfit.colors.first ?? "" }
+        if outfit?.skirt != true { outfitSkirt = .normal }
+    }
+
+    func runOutfit(prompt: String, title: String) {
+        aiError = nil
+        aiPrompt = prompt
+        aiPresetTitle = title
+        aiFaceCrop = false
+        aiHairCrop = false
+        aiToneOnly = false
+        aiPart = nil
+        runAI()
+    }
+
+    /// 没换干净的地方：涂一下只补那一块。
+    func runOutfitPatch() {
+        guard aiHasRegion else {
+            aiError = "先涂抹没换干净的地方。"
+            return
+        }
+        runOutfit(prompt: OutfitCatalog.patchPrompt, title: "补换")
+    }
+
+    /// 结果大体满意、只差一小块：先把结果定下来，再进补换。
+    func startOutfitPatch() {
+        guard !aiRunning, !isBusy else { return }
+        commitTool { [self] in
+            beginAI(group: .outfit)
+            outfitPatch = tool == .ai
         }
     }
 
@@ -1325,7 +1380,7 @@ final class EditorModel {
         return AIEdit(result: result, strokes: aiStrokes, frame: aiFrame, ellipse: aiEllipse, strength: aiStrength,
                       toneOnly: aiToneOnly && tool == .ai, soften: soften,
                       faces: aiKeepFace && tool == .ai ? aiFaces : [],
-                      changedOnly: aiCanKeepRest && aiChangedOnly && tool == .ai, area: aiArea, shift: aiShift,
+                      changedOnly: aiCanKeepRest && aiChangedOnly && tool == .ai, area: aiArea, core: aiCore, shift: aiShift,
                       mono: aiMono, recipe: recipe)
     }
 
@@ -1419,6 +1474,26 @@ final class EditorModel {
         }
         if prompt.contains("涂抹区域"), !aiHasRegion {
             aiError = "先在图上涂抹要去掉的东西，再点发送。"
+            return
+        }
+        // 换衣服（点的款式，或者自己写的要换衣服）：只发人这一块，背景、脸、头都用原图。
+        let typed = aiPresetTitle.isEmpty && aiGroup != .outfit && AIIntent.changesClothes(base)
+        if !aiHasRegion, aiGroup == .outfit || typed, let cg = baseUIImage?.cgImage {
+            let text = prompt.contains(OutfitCatalog.keep) ? prompt : prompt + "。" + OutfitCatalog.clean + OutfitCatalog.keep
+            // 点款式的看选的裙摆；自己写的看说没说裙摆要溢出去。
+            let overflow = aiPresetTitle.isEmpty ? ["溢出", "铺满", "铺开", "拖尾", "大裙摆", "巨大"].contains { base.contains($0) } : outfitSkirt == .overflow && outfitPick != nil
+            let references = aiGroup == .outfit ? [outfitReference].compactMap { $0 } : []
+            aiFrame = nil
+            aiToneOnly = false
+            aiError = nil
+            aiRunning = true
+            aiStarted = Date()
+            Task { [weak self] in
+                let crop = overflow ? nil : await Task.detached(priority: .userInitiated) { OutfitMask.crop(cg) }.value
+                guard let self, self.tool == .ai, self.aiRunning else { return }
+                self.aiRunning = false
+                self.launchAI(prompt: text, strokes: [], crop: crop, guidance: false, references: references, outfit: true, overflow: overflow)
+            }
             return
         }
         if aiHairCrop, !aiHasRegion, let cg = baseUIImage?.cgImage {
@@ -1537,7 +1612,8 @@ final class EditorModel {
 
     /// identity = true：必须还是同一个人的任务。画质设成"自动"时改用高画质，并要求尽量忠实于原图。
     private func launchAI(prompt: String, strokes: [MosaicStroke], crop: CGRect?, guidance: Bool, identity: Bool = false,
-                          reframe: AIReframe = .original, references: [UIImage] = [], recomposed: Bool = false) {
+                          reframe: AIReframe = .original, references: [UIImage] = [], recomposed: Bool = false,
+                          outfit: Bool = false, overflow: Bool = false) {
         guard let proxy, let started = tool else { return }
         guard var endpoint = AISettings.shared.endpoint() else {
             aiError = "还没有设置 \(AISettings.shared.active.shortTitle) 的 API Key。"
@@ -1567,13 +1643,15 @@ final class EditorModel {
         aiMono = false
         aiCanKeepRest = false
         aiArea = nil
+        aiCore = nil
+        aiResultOutfit = false
         aiShift = .zero
         aiUsageText = nil
         // 整张重画、还是同一个人的这几组：出来以后把原图的脸贴回去。
-        var before = started == .ai && crop == nil && strokes.isEmpty
+        var before = started == .ai && outfit ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty
             && [.master, .camera, .compose, .light, .body].contains(aiGroup) ? baseUIImage?.cgImage : nil
         // 只动一部分的这两组：没动的地方用原图。
-        var part = started == .ai && crop == nil && strokes.isEmpty && !recomposed && reframe == .original
+        var part = started == .ai && outfit ? baseUIImage?.cgImage : started == .ai && crop == nil && strokes.isEmpty && !recomposed && reframe == .original
             && [.body, .remove].contains(aiGroup) ? baseUIImage?.cgImage : nil
         let bodyOnly = aiGroup == .body
         let bodyPart = aiPart
@@ -1583,6 +1661,16 @@ final class EditorModel {
         renderAI()
         aiTask = Task { [weak self] in
             do {
+                if outfit {
+                    // 脸在画面里可能很小：比较和找脸用大一点的图。
+                    let sent = ops
+                    if let big = await Task.detached(priority: .userInitiated, operation: {
+                        Renderer.shared.rasterize(EditOp.apply(sent, to: proxy), maxDimension: 3072)
+                    }).value {
+                        before = big.cg
+                        part = big.cg
+                    }
+                }
                 if lifted {
                     // 比较和贴脸都用没盖滤镜的底图。
                     let sent = ops
@@ -1591,19 +1679,30 @@ final class EditorModel {
                     }.value
                     if let r {
                         self?.aiBase = r.ci
-                        if before != nil { before = r.cg }
-                        if part != nil { part = r.cg }
+                        if before != nil, !outfit { before = r.cg }
+                        if part != nil, !outfit { part = r.cg }
                     }
                 }
-                let image = try await AIRunner.run(endpoint: endpoint, prompt: prompt, proxy: proxy, ops: ops,
+                var image = try await AIRunner.run(endpoint: endpoint, prompt: prompt, proxy: proxy, ops: ops,
                                                    strokes: strokes, crop: crop, appendGuidance: guidance, reframe: reframe,
                                                    references: references)
+                if outfit, let crop {
+                    // 只发了人这一块：拼回整张，后面就和发整张的一样处理。
+                    let piece = image, sent = ops
+                    if let whole = await Task.detached(priority: .userInitiated, operation: {
+                        OutfitMask.paste(piece, crop: crop, over: EditOp.apply(sent, to: proxy))
+                    }).value { image = whole }
+                }
+                let result = image
                 let usage = AIClient.takeLastUsage()
                 if let cost = usage?.cost { AISettings.shared.addSpend(cost) }
                 let (before, part) = (before, part)
-                let found = await Task.detached(priority: .userInitiated) { () -> ([FaceKeep], Bool, CGVector, CGImage?) in
+                let found = await Task.detached(priority: .userInitiated) { () -> ([FaceKeep], Bool, CGVector, CGImage?, CGImage?) in
+                    let image = result
                     let shift = part.map { ChangeKeep.shift(original: $0, ai: image) } ?? .zero
                     var area: CGImage?
+                    var core: CGImage?
+
                     if bodyOnly, let part {
                         area = ChangeKeep.personArea(PersonSegmenter.mask(for: part), PersonSegmenter.mask(for: image),
                                                      size: CGSize(width: part.width, height: part.height))
@@ -1612,22 +1711,31 @@ final class EditorModel {
                     var faces = before.map { FaceKeep.match(original: $0, result: image) } ?? []
                     // 五官是在没对齐的 AI 图上量的，跟着整体平移一起挪。
                     for i in faces.indices { faces[i].move(shift, size: CGSize(width: image.width, height: image.height)) }
-                    return (faces, MonoCheck.isMono(image), shift, area)
+                    if outfit, let part {
+                        // 头基本没挪（位置差不到脸宽的 12%、大小差不到 4%）就整个头用原图；挪了就按五官对齐贴脸。
+                        let still = !faces.isEmpty && faces.allSatisfy { $0.isStill }
+                        (area, core) = OutfitMask.masks(original: part, ai: image, overflow: overflow, keepHead: still)
+                        if still { faces = [] }
+                    }
+                    return (faces, MonoCheck.isMono(image), shift, area, core)
                 }.value
                 guard let self, !Task.isCancelled, self.tool == started else { return }
                 self.aiFaces = found.0
                 self.aiMono = found.1
                 self.aiShift = found.2
                 self.aiArea = found.3
+                self.aiCore = found.4
+                self.aiResultOutfit = outfit
+                if outfit { self.aiFrame = nil }
                 self.aiCanKeepRest = part != nil
                 self.aiUsageText = usage?.summary
-                self.aiResult = image
+                self.aiResult = result
                 self.aiResultReframed = reframe != .original || recomposed
                 self.aiHasResult = true
                 self.aiRunning = false
                 self.saveDraft()
                 if started == .beauty, let key = self.pendingFaceKey, let frame = self.aiFrame, let ellipse = self.aiEllipse {
-                    self.faceCache[key] = CachedFace(image: image, frame: frame, ellipse: ellipse)
+                    self.faceCache[key] = CachedFace(image: result, frame: frame, ellipse: ellipse)
                     self.cachedFaceKeys.insert(key)
                 }
                 self.renderAI()
@@ -1656,12 +1764,13 @@ final class EditorModel {
 
     // MARK: 美颜
 
-    private func detectFaces() {
-        guard let cg = baseUIImage?.cgImage else { return }
+    func detectFaces() {
+        guard baseUIImage?.cgImage != nil else { return }
         detectingFaces = true
         Task { [weak self] in
-            let found = await Task.detached(priority: .userInitiated) { FaceDetector.detect(in: cg) }.value
-            guard let self, self.tool == .beauty else { return }
+            guard let self else { return }
+            let found = await self.findFaces()
+            guard self.tool == .beauty else { return }
             self.faces = found
             self.faceStates = [:]
             self.beauty.faces = found.first.map { [$0] } ?? []
@@ -1742,6 +1851,7 @@ final class EditorModel {
 
     /// 点画面：点到哪张脸就切到哪张。
     func tapFace(at point: CGPoint) {
+        if rescueFace(at: point) { return }
         guard tool == .beauty, !aiRunning, faces.count > 1 else { return }
         var best: (index: Int, distance: CGFloat)?
         for (i, face) in faces.enumerated() {

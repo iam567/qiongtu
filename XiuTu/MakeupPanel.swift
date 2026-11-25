@@ -16,12 +16,7 @@ struct MakeupPanel: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 44)
             } else if state.category.isLocal, state.faces.isEmpty {
-                Text(state.unreliable ? "这张脸太小或者太侧，五官定位不准，没法上妆。" : "这张图里没有找到人脸。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(red: 1, green: 0.45, blue: 0.4))
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 44)
+                FaceRescue(model: model, message: state.unreliable ? "这张脸太小或者太侧，五官定位不准" : "这张图里没有找到人脸")
             } else {
                 header(state)
                 if state.category.isLocal { slider }

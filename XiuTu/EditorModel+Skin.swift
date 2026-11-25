@@ -66,19 +66,21 @@ struct SkinState {
 extension EditorModel {
     func beginSkin() {
         skinState = SkinState()
-        guard let cg = baseUIImage?.cgImage, let base = basePreview else { return }
+        guard baseUIImage?.cgImage != nil, let base = basePreview else { return }
         skinState.detecting = true
         let token = skinState.token
         Task { [weak self] in
+            guard let self else { return }
+            let list = await self.findFaces()
             let found = await Task.detached(priority: .userInitiated) { () -> [SkinFace] in
-                FaceDetector.detect(in: cg).map { face in
+                list.map { face in
                     // 量不出来（脸贴着画面边缘之类）就用一个常见的肤色顶上。
                     let tone = SkinEngine.measureTone(base, face: face, context: Renderer.shared.context)
                         ?? SIMD3<Float>(0.45, 0.30, 0.24)
                     return SkinFace(face: face, tone: tone)
                 }
             }.value
-            guard let self, self.tool == .skin, self.skinState.token == token else { return }
+            guard self.tool == .skin, self.skinState.token == token else { return }
             self.skinState.params.faces = found
             self.skinState.faceIndex = 0
             self.skinState.detecting = false
@@ -100,6 +102,7 @@ extension EditorModel {
 
     /// 单击了画面。point 是归一化图片坐标（原点左上角）。
     func skinTapped(at point: CGPoint) {
+        if rescueFace(at: point) { return }
         guard tool == .skin, !skinState.detecting else { return }
         switch skinState.item {
         case .heal:

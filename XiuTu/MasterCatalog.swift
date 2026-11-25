@@ -32,7 +32,7 @@ struct MasterInfo: Decodable, Identifiable {
     let look: Look?
     var id: String { title }
 
-    var prompt: String { "给这张照片做专业调色，风格是：\(tone)。\(MasterCompose.keepTail)" }
+    var prompt: String { "给这张照片做专业调色，风格是：\(tone)。画面保持彩色，不要变成黑白。\(MasterCompose.keepTail)" }
 }
 
 enum MasterCatalog {

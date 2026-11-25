@@ -123,8 +123,40 @@ struct AIPanel: View {
     private var compose: some View {
         if model.aiGroup == .master, let title = model.aiMasterPick, let master = MasterCatalog.byTitle[title] {
             MasterCard(model: model, master: master) { start(AIPreset(title: master.title, prompt: master.prompt)) }
+        } else if model.aiGroup == .outfit {
+            if model.outfitPatch {
+                patch
+            } else {
+                OutfitPanel(model: model, custom: custom)
+            }
         } else {
             tiles
+        }
+    }
+
+    /// 换衣服没换干净：涂抹，再点"补换"。
+    private var patch: some View {
+        VStack(spacing: 12) {
+            brushRow
+            HStack(spacing: 10) {
+                Button { model.outfitPatch = false } label: {
+                    Label("返回", systemImage: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 104, height: 42)
+                        .background(Theme.chip, in: Theme.buttonShape)
+                }
+                .buttonStyle(.plain)
+                Button { model.runOutfitPatch() } label: {
+                    Text("补换涂抹的地方")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .background(model.aiStrokes.isEmpty ? Theme.accent.opacity(0.35) : Theme.accent, in: Theme.buttonShape)
+                        .overlay(alignment: .topTrailing) { CornerBadge(text: "AI").offset(x: -6, y: -5) }
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -201,6 +233,14 @@ struct AIPanel: View {
             }
             .padding(.horizontal, -16)
             .id(model.aiGroup == .creative ? "creative-" + creativeKind.rawValue : model.aiGroup.rawValue + (master ? masterGroup : ""))
+            brushRow
+        }
+        .task(id: model.aiGroup) {
+            if model.aiGroup.usesTonePreview { model.prepareMasterThumbs() }
+        }
+    }
+
+    private var brushRow: some View {
             HStack(spacing: 10) {
                 Text("涂抹")
                     .font(.system(size: 13))
@@ -212,10 +252,6 @@ struct AIPanel: View {
                 smallButton("trash", active: false) { model.clearAIRegion() }
                     .opacity(model.aiStrokes.isEmpty ? 0.35 : 1)
             }
-        }
-        .task(id: model.aiGroup) {
-            if model.aiGroup.usesTonePreview { model.prepareMasterThumbs() }
-        }
     }
 
     private var presets: [AIPreset] {
@@ -296,7 +332,7 @@ struct AIPanel: View {
             }
             if model.aiCanKeepRest, !model.aiToneOnly {
                 HStack(spacing: 8) {
-                    Chip(title: "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
+                    Chip(title: model.aiResultOutfit ? "只换衣服" : "只换变了的地方", selected: model.aiChangedOnly) { model.setAIChangedOnly(true) }
                     Chip(title: "完整采用 AI 图", selected: !model.aiChangedOnly) { model.setAIChangedOnly(false) }
                     Spacer()
                 }
@@ -329,6 +365,16 @@ struct AIPanel: View {
                     .font(.system(size: 14, weight: .semibold))
                     .monospacedDigit()
                     .frame(width: 34, alignment: .trailing)
+            }
+            if model.aiResultOutfit || (model.aiGroup == .outfit && model.outfitPatch) {
+                Button { model.startOutfitPatch() } label: {
+                    Label("有地方没换干净，涂抹补换", systemImage: "paintbrush")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(Theme.chip, in: Theme.buttonShape)
+                }
+                .buttonStyle(.plain)
             }
             HStack(spacing: 10) {
                 if !model.aiResultFused {

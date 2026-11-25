@@ -13,15 +13,37 @@ enum ChangeKeep {
     }
     """)
 
-    /// area：只允许在这一块里换（白 = 允许），不给就整张都可以。
-    static func apply(original: CIImage, ai: CIImage, area: CIImage?) -> CIImage {
+    private static let outsideKernel = CIColorKernel(source: """
+    kernel vec4 outsideGain(__sample s, __sample o, __sample a) {
+        vec3 e = vec3(0.004);
+        vec3 g = clamp((o.rgb + e) / (a.rgb + e), vec3(0.6), vec3(1.7));
+        return vec4(s.rgb * g, s.a);
+    }
+    """)
+
+    /// 只看 area 外面（背景）的色差来校正 AI 图：换衣服时人身上的颜色本来就要变，不能拿来比。
+    private static func tonedByOutside(_ ai: CIImage, _ original: CIImage, _ area: CIImage, _ soft: (CIImage, CGFloat) -> CIImage, _ radius: CGFloat) -> CIImage {
+        let outside = area.applyingFilter("CIColorInvert")
+        func weighted(_ image: CIImage) -> CIImage {
+            soft(image.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: outside]).cropped(to: ai.extent), radius)
+        }
+        return outsideKernel?.apply(extent: ai.extent, arguments: [ai, weighted(original), weighted(ai)]) ?? ai
+    }
+
+    /// area：只允许在这一块里换（白 = 允许），不给就整张都可以。core：这一块一定用 AI 的（换衣服）。
+    static func apply(original: CIImage, ai: CIImage, area: CIImage?, core: CIImage? = nil) -> CIImage {
         let extent = original.extent
         let long = max(extent.width, extent.height)
         func soft(_ image: CIImage, _ radius: CGFloat) -> CIImage {
             image.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius]).cropped(to: extent)
         }
         // AI 常把整张的明暗颜色带偏一点：先按大范围拉回原图的样子，再比较、再贴。
-        let toned = ToneTransfer.apply(original: ai, graded: original, radius: long * 0.05)
+        let toned: CIImage
+        if core != nil, let area {
+            toned = tonedByOutside(ai, original, area, soft, long * 0.12)
+        } else {
+            toned = ToneTransfer.apply(original: ai, graded: original, radius: long * 0.05)
+        }
         let sigma = long * 0.0028
         guard let diff = diffKernel?.apply(extent: extent, arguments: [soft(original, sigma), soft(toned, sigma)]) else { return ai }
         // 去掉零星的小点，再往外扩一点、羽化，接缝落在没变的地方。
@@ -31,6 +53,9 @@ enum ChangeKeep {
             .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: long * 0.009])
             .cropped(to: extent)
         mask = soft(mask, long * 0.005)
+        if let core {
+            mask = core.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: mask]).cropped(to: extent)
+        }
         if let area {
             mask = mask.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: area]).cropped(to: extent)
         }
@@ -74,7 +99,7 @@ enum ChangeKeep {
     }
 
     /// 人和人周围一圈（原图里的人和 AI 图里的人合起来，往外扩一点）。
-    static func personArea(_ a: CGImage?, _ b: CGImage?, size: CGSize) -> CGImage? {
+    static func personArea(_ a: CGImage?, _ b: CGImage?, size: CGSize, grow: CGFloat = 22, blur: CGFloat = 8) -> CGImage? {
         let masks = [a, b].compactMap { $0 }
         guard !masks.isEmpty else { return nil }
         let k = 640 / max(size.width, size.height)
@@ -87,8 +112,8 @@ enum ChangeKeep {
             out = s.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: out]).cropped(to: rect)
         }
         out = out.clampedToExtent()
-            .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: 22])
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 8])
+            .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: grow])
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blur])
             .cropped(to: rect)
         return Renderer.shared.context.createCGImage(out, from: rect, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
     }
