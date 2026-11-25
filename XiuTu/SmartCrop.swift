@@ -88,6 +88,8 @@ enum SmartCrop {
         return out
     }
 
+    static func object(_ text: String, key: String) -> [String: Any]? { jsonObject(in: text, start: "{\"\(key)\"") as? [String: Any] }
+
     /// 读一组框（找脸用）。
     static func boxes(_ text: String, key: String) -> [CGRect] {
         guard let dict = jsonObject(in: text, start: "{\"\(key)\"") as? [String: Any], let list = dict[key] as? [[String: Any]] else { return [] }

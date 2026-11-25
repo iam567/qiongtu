@@ -251,6 +251,9 @@ struct EditorView: View {
                 } else if let tool = Tool(rawValue: name) {
                     start(tool)
                     if tool == .smartCrop, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil { model.runSmartCrop() }
+                    if tool == .beauty, ProcessInfo.processInfo.environment["XIUTU_AUTORUN"] != nil {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { model.runFaceAI(BeautyStyle.all[0]) }
+                    }
                 }
             }
             #endif

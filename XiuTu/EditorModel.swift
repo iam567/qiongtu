@@ -103,6 +103,7 @@ final class EditorModel {
     /// 同一条指令点了几次"再生成一次"；每次在指令后面加不同的变化要求，避免出来的图都一样。
     /// 换衣服：点了哪一款、颜色、裙摆、照着换的图；patch = 涂抹补换没换干净的地方。
     /// 用户点的、AI 指出来的脸（画布大小没变就一直用）。
+    @ObservationIgnored var describedFaces: [Int: String] = [:]
     @ObservationIgnored var forcedFaces: [FaceInfo] = []
     @ObservationIgnored var forcedFacesSize: CGSize?
     var faceRescuing = false
@@ -1687,6 +1688,15 @@ final class EditorModel {
                 let result = image
                 let usage = AIClient.takeLastUsage()
                 if let cost = usage?.cost { AISettings.shared.addSpend(cost) }
+                if started == .beauty, let crop {
+                    // 修完的脸和原来对不上（画成别人、换了姿势）就不采用。
+                    let sent = ops
+                    let same = await Task.detached(priority: .userInitiated) { () -> Bool in
+                        guard let original = Self.piece(EditOp.apply(sent, to: proxy), crop) else { return true }
+                        return FaceCheck.matches(original: original, result: result)
+                    }.value
+                    if !same { throw AIError(text: "AI 这次把脸画成了别人，没有采用。可以再点一次；脸太小太糊的话，先用 AI 修复里的\u{201C}增强画质\u{201D}。") }
+                }
                 let (before, part) = (before, part)
                 let found = await Task.detached(priority: .userInitiated) { () -> ([FaceKeep], Bool, CGVector, CGImage?, CGImage?) in
                     let image = result
@@ -1765,6 +1775,7 @@ final class EditorModel {
             let found = await self.findFaces()
             guard self.tool == .beauty else { return }
             self.faces = found
+            self.describedFaces = [:]
             self.faceStates = [:]
             self.beauty.faces = found.first.map { [$0] } ?? []
             self.faceIndex = 0
@@ -1926,6 +1937,13 @@ final class EditorModel {
             return
         }
         let face = faces[faceIndex]
+        if !describedFaces.keys.contains(faceIndex), needsDescription(face) {
+            // 脸太小、太糊、认不出五官：先让 AI 看清原来的样子，框也按它指的校准，再去修，免得修成别人。
+            describeFace(face, index: faceIndex) { [weak self] in
+                self?.runFaceAI(style, force: force, references: references)
+            }
+            return
+        }
         let size = pixelSize()
         let crop = faceFrame(face, factor: 2.0)
         let bw = face.box.width * size.width
@@ -1938,8 +1956,67 @@ final class EditorModel {
         aiFrame = crop
         aiEllipse = ellipse
         pendingFaceKey = key
-        launchAI(prompt: BeautyStyle.preamble + " " + style.prompt, strokes: [], crop: crop, guidance: false, identity: true,
+        // 原来的样子写清楚，AI 不许改。
+        let known = (describedFaces[faceIndex] ?? "").isEmpty ? "" : " The person currently looks like this and must stay exactly so: \(describedFaces[faceIndex] ?? "")"
+            + " The source is small and slightly blurry: restore it conservatively, never invent a different face."
+        launchAI(prompt: BeautyStyle.preamble + " " + style.prompt + known, strokes: [], crop: crop, guidance: false, identity: true,
                  references: references)
+    }
+
+    /// 这张脸要不要先让 AI 看清楚：五官认不出，或者原图里脸宽不到 220 像素。
+    private func needsDescription(_ face: FaceInfo) -> Bool {
+        guard AISettings.shared.endpoint() != nil else { return false }
+        let full = (source?.extent.width ?? 0) > 0 ? CGFloat(max(source?.extent.width ?? 0, source?.extent.height ?? 0)) : 0
+        let size = pixelSize()
+        let pixels = face.box.width * size.width / max(size.width, size.height) * full
+        return !face.hasReliableLandmarks || pixels < 220
+    }
+
+    private func describeFace(_ face: FaceInfo, index: Int, then next: @escaping () -> Void) {
+        guard let endpoint = AISettings.shared.endpoint(), let proxy else { return next() }
+        let crop = faceFrame(face, factor: 3)
+        let ops = liftedFloating.isEmpty ? self.ops : EditOp.splitFloating(self.ops).photo
+        aiError = nil
+        aiRunning = true
+        aiStarted = Date()
+        aiTask = Task { [weak self] in
+            var desc = "", box: CGRect?
+            let jpeg = await Task.detached(priority: .userInitiated) { () -> Data? in
+                Self.piece(EditOp.apply(ops, to: proxy), crop).flatMap {
+                    AIOneShot.prepared(UIImage(cgImage: $0), maxSide: 1024).jpegData(compressionQuality: 0.9)
+                }
+            }.value
+            if let jpeg, let text = try? await AIClient.look(endpoint, prompt: FaceCheck.describePrompt, jpeg: jpeg) {
+                desc = String((SmartCrop.object(text, key: "faces")?["desc"] as? String ?? "").prefix(500))
+                // 挑离原来那个位置最近的框。
+                box = SmartCrop.boxes(text, key: "faces").min {
+                    hypot($0.midX - 0.5, $0.midY - 0.5) < hypot($1.midX - 0.5, $1.midY - 0.5)
+                }
+            }
+            guard let self, !Task.isCancelled, self.tool == .beauty, self.aiRunning else { return }
+            self.aiRunning = false
+            // 看不了图也照常修，只是少了这句描述。
+            self.describedFaces[index] = desc
+            if let b = box, !face.hasReliableLandmarks, b.width > 0.1, self.faces.indices.contains(index) {
+                let moved = CGRect(x: crop.minX + b.minX * crop.width, y: crop.minY + b.minY * crop.height,
+                                   width: b.width * crop.width, height: b.height * crop.height)
+                self.faces[index] = FaceInfo(box: moved)
+                self.forcedFaces = self.faces
+                self.forcedFacesSize = self.basePreview?.extent.size
+                self.updateFocus()
+            }
+            next()
+        }
+    }
+
+    /// 裁出画面里的一块（归一化，左上原点）。
+    nonisolated static func piece(_ image: CIImage, _ crop: CGRect) -> CGImage? {
+        let e = image.extent
+        let r = CGRect(x: e.minX + crop.minX * e.width, y: e.maxY - crop.maxY * e.height, width: crop.width * e.width, height: crop.height * e.height)
+            .integral.intersection(e)
+        guard r.width >= 8, r.height >= 8 else { return nil }
+        let moved = image.cropped(to: r).transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
+        return Renderer.shared.rasterize(moved, maxDimension: 1200)?.cg
     }
 
     /// 对当前显示的这个风格重新生成一次（会再调用一次接口）。
